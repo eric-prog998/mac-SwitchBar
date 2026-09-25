@@ -57,10 +57,13 @@ struct PanelView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(greeting)
                     .font(Theme.rounded(18, .bold))
-                Text(summary)
-                    .font(Theme.rounded(11, .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                // 每秒刷新一次，倒计时、剩余时间才会跟着走
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    Text(summary)
+                        .font(Theme.rounded(11, .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 6)
             if let battery = store.battery {
