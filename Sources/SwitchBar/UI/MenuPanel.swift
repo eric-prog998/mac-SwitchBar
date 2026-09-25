@@ -5,9 +5,11 @@ import SwiftUI
 ///
 /// 用「不激活应用」的浮动面板实现：打开面板不会抢走当前应用的焦点，
 /// 点面板外任何地方、按 Esc、切换桌面空间都会自动关闭。
-final class MenuPanelController {
-    private let panel: MenuPanelWindow
-    private let hostingView: NSView
+/// 面板的窗口和界面只在打开时创建，关闭后立刻释放，平时不占内存、也不会在后台刷新。
+final class MenuPanelController<Content: View> {
+    private let makeContent: () -> Content
+    private var panel: MenuPanelWindow?
+    private var hosting: NSHostingController<Content>?
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var spaceObserver: NSObjectProtocol?
@@ -15,32 +17,28 @@ final class MenuPanelController {
     /// 状态栏按钮所在的窗口；点它时交给按钮自己处理开关，不要当成「点了外面」
     weak var statusButtonWindow: NSWindow?
 
-    var isShown: Bool { panel.isVisible }
+    var isShown: Bool { panel?.isVisible ?? false }
 
     /// 窗口编号（调试版截图用）
-    var windowNumber: Int { panel.windowNumber }
+    var windowNumber: Int? { panel?.windowNumber }
 
-    init<Content: View>(rootView: Content) {
-        panel = MenuPanelWindow(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
-                                backing: .buffered, defer: true)
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.level = .statusBar
-        panel.hidesOnDeactivate = false
-        panel.isReleasedWhenClosed = false
-        panel.isMovable = false
-        panel.animationBehavior = .utilityWindow
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
-
-        let hosting = NSHostingView(rootView: rootView)
-        hostingView = hosting
-        panel.contentView = hosting
+    init(content: @escaping () -> Content) {
+        makeContent = content
     }
 
     /// 在状态栏按钮下方显示；按钮不可见（比如被刘海挡住）时显示在屏幕右上角
     func show(below button: NSStatusBarButton?) {
-        let size = hostingView.fittingSize
+        let panel = self.panel ?? makePanel()
+        self.panel = panel
+        let hosting: NSHostingController<Content>
+        if let existing = self.hosting {
+            hosting = existing
+        } else {
+            hosting = NSHostingController(rootView: makeContent())
+            self.hosting = hosting
+            panel.contentViewController = hosting
+        }
+        let size = contentSize(of: hosting)
         let anchor = buttonFrameOnScreen(button)
         let screen = anchor.flatMap { frame in NSScreen.screens.first { $0.frame.intersects(frame) } }
             ?? NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
@@ -66,8 +64,45 @@ final class MenuPanelController {
 
     func close() {
         removeMonitors()
-        guard panel.isVisible else { return }
+        guard let panel, panel.isVisible else { return }
         panel.orderOut(nil)
+        // 面板里的按钮可能还在处理这次点击（比如点了「锁定屏幕」），等它处理完再释放界面
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let current = self.panel, current === panel, !current.isVisible else { return }
+            current.contentViewController = nil
+            self.hosting = nil
+            self.panel = nil
+        }
+    }
+
+    /// 界面需要的大小。刚创建的 SwiftUI 界面还没排过版，直接问 AppKit（fittingSize）会得到 0×0，
+    /// 所以直接让 SwiftUI 按内容算；万一还是算不出来，就先排一次版再量，最后兜底用固定大小，保证面板一定看得见。
+    private func contentSize(of hosting: NSHostingController<Content>) -> NSSize {
+        var size = hosting.sizeThatFits(in: NSSize(width: 10_000, height: 10_000))
+        if !Self.isUsable(size) {
+            hosting.view.layoutSubtreeIfNeeded()
+            size = hosting.view.fittingSize
+        }
+        return Self.isUsable(size) ? size : NSSize(width: 356, height: 560)
+    }
+
+    private static func isUsable(_ size: NSSize) -> Bool {
+        size.width >= 100 && size.height >= 100 && size.width < 5_000 && size.height < 5_000
+    }
+
+    private func makePanel() -> MenuPanelWindow {
+        let panel = MenuPanelWindow(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+                                    backing: .buffered, defer: true)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .statusBar
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.isMovable = false
+        panel.animationBehavior = .utilityWindow
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
+        return panel
     }
 
     // MARK: - 关闭时机

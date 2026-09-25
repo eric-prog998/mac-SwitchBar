@@ -50,7 +50,8 @@ final class SettingsRouter: ObservableObject {
     @Published var tab: SettingsTab = .features
 }
 
-final class SettingsWindowController {
+/// 设置窗口只在打开时创建，关掉后立刻释放（窗口里的界面不会在后台继续刷新）
+final class SettingsWindowController: NSObject, NSWindowDelegate {
     static let shared = SettingsWindowController()
 
     private var window: NSWindow?
@@ -70,10 +71,21 @@ final class SettingsWindowController {
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.isReleasedWhenClosed = false
+            window.delegate = self
             window.center()
             self.window = window
         }
         AppActivation.activate()
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let closing = notification.object as? NSWindow, closing === window else { return }
+        // 等窗口关完再释放；如果这期间又被打开了，就留着
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.window === closing, !closing.isVisible else { return }
+            closing.delegate = nil
+            self.window = nil
+        }
     }
 }

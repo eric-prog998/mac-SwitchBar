@@ -4,15 +4,20 @@ import SwiftUI
 /// 菜单栏图标：左键打开开关面板，右键弹出「设置 / 退出」
 final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
-    private let panel: MenuPanelController
+    private let panel: MenuPanelController<PanelView>
     private let store: SwitchStore
+    /// 菜单栏上现在显示的是不是倒计时
+    private var showsCountdown = false
+
+    private static let switchImage = templateSymbol("switch.2", description: "SwitchBar")
+    private static let timerImage = templateSymbol("timer", description: "专注计时")
 
     init(store: SwitchStore) {
         self.store = store
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         // 记住位置：按住 ⌘ 拖动过图标后，下次启动仍在原处（有刘海的屏幕上可以把它挪到不被挡住的地方）
         statusItem.autosaveName = "SwitchBarStatusItem"
-        panel = MenuPanelController(rootView: PanelView(store: store, prefs: store.prefs))
+        panel = MenuPanelController { PanelView(store: store, prefs: store.prefs) }
         super.init()
 
         if let button = statusItem.button {
@@ -28,24 +33,32 @@ final class StatusBarController: NSObject {
         store.onTimerTick = { [weak self] in
             self?.updateStatusItem()
         }
-        updateStatusItem()
+        statusItem.button?.image = Self.switchImage
+        statusItem.button?.imagePosition = .imageOnly
     }
 
-    /// 平时只显示开关图标；专注计时时显示倒计时
+    private static func templateSymbol(_ name: String, description: String) -> NSImage? {
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: description)
+        image?.isTemplate = true
+        return image
+    }
+
+    /// 平时只显示开关图标；专注计时时显示倒计时（每秒只更新文字）
     private func updateStatusItem() {
         guard let button = statusItem.button else { return }
         let timer = store.focusTimer
         if timer.isRunning {
-            let image = NSImage(systemSymbolName: "timer", accessibilityDescription: "专注计时")
-            image?.isTemplate = true
-            button.image = image
-            button.imagePosition = .imageLeading
-            button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium)
-            button.title = " " + FocusTimer.format(timer.remaining)
-        } else {
-            let image = NSImage(systemSymbolName: "switch.2", accessibilityDescription: "SwitchBar")
-            image?.isTemplate = true
-            button.image = image
+            if !showsCountdown {
+                showsCountdown = true
+                button.image = Self.timerImage
+                button.imagePosition = .imageLeading
+                button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+            }
+            let title = " " + FocusTimer.format(timer.remaining)
+            if button.title != title { button.title = title }
+        } else if showsCountdown {
+            showsCountdown = false
+            button.image = Self.switchImage
             button.imagePosition = .imageOnly
             button.title = ""
         }

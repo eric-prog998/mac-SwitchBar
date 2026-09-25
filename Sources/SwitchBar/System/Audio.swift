@@ -1,8 +1,8 @@
 import CoreAudio
 import Foundation
 
-/// 静音麦克风 / 系统声音：直接设置当前默认输入或输出设备的「静音」属性（公开的 CoreAudio 接口）。
-/// 有些设备不支持静音属性，就退而求其次把音量调到 0，取消静音时再恢复原音量。
+/// 静音麦克风：直接设置当前默认输入设备的「静音」属性（公开的 CoreAudio 接口）。
+/// 有些设备不支持静音属性，就退而求其次把输入音量调到 0，取消静音时再恢复原音量。
 /// 只改设备属性、不采集任何声音，所以不需要「麦克风」权限。
 struct AudioMute {
     private let scope: AudioObjectPropertyScope
@@ -14,11 +14,6 @@ struct AudioMute {
     static let input = AudioMute(scope: kAudioObjectPropertyScopeInput,
                                  defaultDeviceSelector: kAudioHardwarePropertyDefaultInputDevice,
                                  savedVolumes: \.savedMicVolumes)
-
-    /// 系统声音（默认输出设备）
-    static let output = AudioMute(scope: kAudioObjectPropertyScopeOutput,
-                                  defaultDeviceSelector: kAudioHardwarePropertyDefaultOutputDevice,
-                                  savedVolumes: \.savedOutputVolumes)
 
     func defaultDevice() -> AudioDeviceID? {
         var address = AudioObjectPropertyAddress(

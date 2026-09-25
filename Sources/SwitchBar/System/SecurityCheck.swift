@@ -15,7 +15,7 @@ enum SecurityCheck {
         case unknown(String)
     }
 
-    /// 辅助功能（锁定键盘、清洁屏幕需要）
+    /// 辅助功能（清洁屏幕需要）
     static var accessibility: State {
         AXIsProcessTrusted() ? .granted : .denied
     }

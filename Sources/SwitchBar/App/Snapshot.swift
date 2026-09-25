@@ -10,8 +10,7 @@ import SwiftUI
 /// 并把窗口编号写进 windows-<阶段>.txt，由 CI 用 screencapture 截取真实效果（包括液态玻璃）。
 enum Snapshot {
     private static var directory = URL(fileURLWithPath: "/tmp")
-    private static var panel: MenuPanelController?
-    private static var lockWindow: NSWindow?
+    private static var panel: MenuPanelController<PanelView>?
 
     private struct Phase {
         let name: String
@@ -39,12 +38,13 @@ enum Snapshot {
 
         let store = SwitchStore.shared
         store.keepAwake.start(minutes: 60) // 让截图里有「开启」的开关、场景和计时
-        store.debugMarkSceneActive(.present)
+        store.debugMarkSceneActive(.focus)
         store.debugStartTimer(minutes: 25)
         store.refresh()
         print("states: \(store.states.map { "\($0.key.rawValue)=\($0.value)" }.sorted())")
         print("unavailable: \(store.unavailable.map(\.rawValue).sorted())")
 
+        checkPanelRelease(store)
         renderStatic(store)
 
         if environment["SWITCHBAR_SNAPSHOT_LIVE"] != nil {
@@ -54,6 +54,34 @@ enum Snapshot {
             finish()
         }
         return true
+    }
+
+    // MARK: - 面板反复打开 / 关闭后内存要能回收
+
+    private static func checkPanelRelease(_ store: SwitchStore) {
+        let panel = MenuPanelController { PanelView(store: store, prefs: store.prefs) }
+        func cycle() {
+            panel.show(below: nil)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+            panel.close()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        }
+        cycle() // 第一次打开会加载 SwiftUI 等框架，不算
+        let before = footprintMB()
+        for _ in 0..<10 { cycle() }
+        let after = footprintMB()
+        print(String(format: "panel open/close x10: footprint %.1f MB -> %.1f MB, window released: %@",
+                     before, after, panel.windowNumber == nil ? "yes" : "no"))
+    }
+
+    private static func footprintMB() -> Double {
+        var info = rusage_info_v4()
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
+                proc_pid_rusage(getpid(), RUSAGE_INFO_V4, $0)
+            }
+        }
+        return result == 0 ? Double(info.ri_phys_footprint) / 1_048_576 : -1
     }
 
     // MARK: - 离屏渲染
@@ -67,7 +95,6 @@ enum Snapshot {
             render(SettingsView(store: store, prefs: store.prefs, router: SettingsRouter.shared), appearance: .aqua,
                    name: "settings-\(tab.rawValue)")
         }
-        render(KeyboardLockView {}, appearance: .darkAqua, name: "lock-keyboard")
         render(CleaningView(showsControls: true) {}.frame(width: 800, height: 500), appearance: .darkAqua,
                name: "lock-cleaning")
     }
@@ -101,41 +128,28 @@ enum Snapshot {
         NSApp.appearance = NSAppearance(named: phase.appearance)
 
         let store = SwitchStore.shared
-        let panel = self.panel ?? MenuPanelController(rootView: PanelView(store: store, prefs: store.prefs))
+        let panel = self.panel ?? MenuPanelController { PanelView(store: store, prefs: store.prefs) }
         self.panel = panel
         panel.close()
         panel.show(below: nil)
 
         SettingsWindowController.shared.show(tab: phase.tab)
-        HUD.shared.show("深色模式：开", symbol: "moon.fill", duration: 60)
-        showKeyboardLock()
+        if index % 2 == 0 {
+            HUD.shared.show("深色模式：开", symbol: "moon.fill", duration: 60)
+        } else {
+            HUD.shared.show("已复制 #0A84FF", symbol: "circle.fill", color: .systemBlue, duration: 60)
+        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            var lines = "panel \(panel.windowNumber)\n"
+            var lines = ""
+            if let number = panel.windowNumber { lines += "panel \(number)\n" }
             if let number = SettingsWindowController.shared.windowNumber { lines += "settings \(number)\n" }
             if let number = HUD.shared.windowNumber { lines += "hud \(number)\n" }
-            if let number = lockWindow?.windowNumber { lines += "lock \(number)\n" }
             write(lines, to: "windows-\(phase.name).txt")
             waitForCapture(phase.name, attemptsLeft: 120) {
                 runPhase(index + 1)
             }
         }
-    }
-
-    private static func showKeyboardLock() {
-        if lockWindow == nil {
-            let hosting = NSHostingView(rootView: KeyboardLockView {})
-            let size = hosting.fittingSize
-            let window = OverlayWindow(contentRect: NSRect(x: 60, y: 120, width: size.width, height: size.height),
-                                       styleMask: [.borderless], backing: .buffered, defer: false)
-            window.contentView = hosting
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            window.hasShadow = true
-            window.level = .floating
-            lockWindow = window
-        }
-        lockWindow?.orderFrontRegardless()
     }
 
     private static func waitForCapture(_ phase: String, attemptsLeft: Int, then next: @escaping () -> Void) {

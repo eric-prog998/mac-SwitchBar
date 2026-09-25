@@ -1,8 +1,8 @@
 import Foundation
 
-// 夜览和原彩显示没有公开接口，系统设置本身用的是 CoreBrightness 私有框架。
-// 这里在运行时动态加载它，只调用「读状态 / 开 / 关」这几个方法；
-// 如果未来 macOS 改掉了这些方法，对应开关会自动变成不可用，而不会崩溃。
+// 夜览没有公开接口，系统设置本身用的是 CoreBrightness 私有框架。
+// 这里在运行时动态加载它（第一次打开面板或切换夜览时才加载，平时不占内存），只调用「读状态 / 开 / 关」这几个方法；
+// 如果未来 macOS 改掉了这些方法，夜览开关会自动变成不可用，而不会崩溃。
 
 private let coreBrightnessLoaded: Bool = {
     dlopen("/System/Library/PrivateFrameworks/CoreBrightness.framework/CoreBrightness", RTLD_LAZY) != nil
@@ -15,14 +15,6 @@ private func makeClient(_ className: String) -> NSObject? {
 
 /// 用 Objective-C 运行时安全地调用返回 BOOL 的方法
 private enum ObjCCall {
-    static func bool(_ object: NSObject, _ name: String) -> Bool? {
-        let selector = NSSelectorFromString(name)
-        guard object.responds(to: selector) else { return nil }
-        typealias Function = @convention(c) (NSObject, Selector) -> Bool
-        let function = unsafeBitCast(object.method(for: selector), to: Function.self)
-        return function(object, selector)
-    }
-
     static func setBool(_ object: NSObject, _ name: String, _ value: Bool) -> Bool? {
         let selector = NSSelectorFromString(name)
         guard object.responds(to: selector) else { return nil }
@@ -43,7 +35,7 @@ private enum ObjCCall {
 
 /// 夜览（CBBlueLightClient）
 final class NightShift {
-    private let client = makeClient("CBBlueLightClient")
+    private lazy var client = makeClient("CBBlueLightClient")
 
     var isSupported: Bool {
         guard client != nil else { return false }
@@ -67,26 +59,6 @@ final class NightShift {
     }
 
     /// 返回是否成功调用
-    func setEnabled(_ enabled: Bool) -> Bool {
-        guard let client else { return false }
-        return ObjCCall.setBool(client, "setEnabled:", enabled) != nil
-    }
-}
-
-/// 原彩显示（CBTrueToneClient）
-final class TrueTone {
-    private let client = makeClient("CBTrueToneClient")
-
-    var isSupported: Bool {
-        guard let client else { return false }
-        return (ObjCCall.bool(client, "supported") ?? false) && (ObjCCall.bool(client, "available") ?? false)
-    }
-
-    var isEnabled: Bool {
-        guard let client else { return false }
-        return ObjCCall.bool(client, "enabled") ?? false
-    }
-
     func setEnabled(_ enabled: Bool) -> Bool {
         guard let client else { return false }
         return ObjCCall.setBool(client, "setEnabled:", enabled) != nil

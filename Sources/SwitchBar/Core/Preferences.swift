@@ -23,7 +23,8 @@ final class Preferences: ObservableObject {
         static let bluetoothAddress = "bluetoothAddress"
         static let bluetoothName = "bluetoothName"
         static let micVolumes = "savedMicVolumes"
-        static let outputVolumes = "savedOutputVolumes"
+        /// 2.0 删掉「静音」开关后不再使用
+        static let obsoleteOutputVolumes = "savedOutputVolumes"
     }
 
     private let defaults = UserDefaults.standard
@@ -133,12 +134,6 @@ final class Preferences: ObservableObject {
         set { defaults.set(newValue, forKey: Key.micVolumes) }
     }
 
-    /// 系统声音不支持「静音」属性时，静音前记下的音量
-    var savedOutputVolumes: [Float] {
-        get { (defaults.array(forKey: Key.outputVolumes) as? [NSNumber])?.map(\.floatValue) ?? [] }
-        set { defaults.set(newValue, forKey: Key.outputVolumes) }
-    }
-
     var visibleFeatures: [FeatureID] {
         featureOrder.filter { !hiddenFeatures.contains($0) }
     }
@@ -171,6 +166,8 @@ final class Preferences: ObservableObject {
         dndOffShortcut = d.string(forKey: Key.dndOff) ?? "关闭勿扰"
         bluetoothAddress = d.string(forKey: Key.bluetoothAddress) ?? ""
         bluetoothName = d.string(forKey: Key.bluetoothName) ?? ""
+        // 已删除的功能留下的设置（旧版本里被删掉的开关、场景的顺序和快捷键在读取时会自动忽略）
+        d.removeObject(forKey: Key.obsoleteOutputVolumes)
     }
 
     // MARK: - 面板

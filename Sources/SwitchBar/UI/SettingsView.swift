@@ -94,7 +94,7 @@ private struct FeaturesSettingsView: View {
                     SettingsIcon(symbol: "command", color: .purple)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("推荐快捷键")
-                        Text(recommendResult ?? "⌃⌥ + 好记的字母，例如 ⌃⌥D 深色模式、⌃⌥1 演示场景、⌃⌥T 专注计时；不会覆盖已设置的")
+                        Text(recommendResult ?? "⌃⌥ + 好记的字母，例如 ⌃⌥D 深色模式、⌃⌥V 纯文本、⌃⌥1 专注场景、⌃⌥T 专注计时；不会覆盖已设置的")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -366,10 +366,17 @@ private struct FocusSettingsView: View {
         .formStyle(.grouped)
     }
 
+    /// 「快捷指令」列出全部指令要一两秒，放到后台做，不卡住设置窗口
     private func check() {
-        let names = Set(Shortcuts.list())
-        let missing = [prefs.dndOnShortcut, prefs.dndOffShortcut].filter { !names.contains($0) }
-        checkResult = missing.isEmpty ? "✅ 两个快捷指令都找到了" : "❌ 没找到：\(missing.joined(separator: "、"))"
+        checkResult = "正在检查…"
+        let wanted = [prefs.dndOnShortcut, prefs.dndOffShortcut]
+        DispatchQueue.global(qos: .userInitiated).async {
+            let names = Set(Shortcuts.list())
+            let missing = wanted.filter { !names.contains($0) }
+            DispatchQueue.main.async {
+                checkResult = missing.isEmpty ? "✅ 两个快捷指令都找到了" : "❌ 没找到：\(missing.joined(separator: "、"))"
+            }
+        }
     }
 }
 
@@ -409,7 +416,7 @@ private struct SecurityView: View {
         Form {
             Section {
                 PermissionStatusRow(symbol: "accessibility", color: .blue, title: "辅助功能",
-                                    usage: "锁定键盘、清洁屏幕：暂时拦截按键", state: accessibility, needed: true) {
+                                    usage: "清洁屏幕：擦屏幕时暂时拦截按键和触控板手势", state: accessibility, needed: true) {
                     SystemSettings.open(.accessibility)
                 }
                 PermissionStatusRow(symbol: "gearshape.2.fill", color: .gray, title: "自动化 › 系统事件",
@@ -455,7 +462,9 @@ private struct SecurityView: View {
                 SecurityFactRow(symbol: "antenna.radiowaves.left.and.right.slash", color: .green, title: "不接受外部指令",
                                 detail: "没有网址协议、没有 AppleScript 接口、没有后台服务、不监听任何端口，别的程序或网络上的人都没法遥控它。")
                 SecurityFactRow(symbol: "keyboard.fill", color: .green, title: "不记录按键",
-                                detail: "锁定键盘时按键直接丢弃、不保存；全局快捷键只会收到你设置的那几个组合键。")
+                                detail: "清洁屏幕时按键直接丢弃、不保存；全局快捷键只会收到你设置的那几个组合键。")
+                SecurityFactRow(symbol: "doc.on.clipboard.fill", color: .green, title: "不监视剪贴板、不看屏幕",
+                                detail: "「纯文本」只在你点按钮或按快捷键的那一刻读写一次剪贴板，不保存任何内容；「取色器」用的是系统自带的取色放大镜，SwitchBar 自己看不到屏幕，所以不需要「屏幕录制」权限。")
                 SecurityFactRow(symbol: "signature", color: .gray, title: "签名",
                                 detail: signatureText)
             } header: {
@@ -645,7 +654,7 @@ private struct AboutView: View {
             }
 
             Section {
-                Text("夜览、原彩显示：CoreBrightness 框架（系统设置自己也用它）\n锁定屏幕：login 框架的 SACLockScreenImmediate（不可用时退回 pmset）\n它们都只在本机调用系统自带功能；如果将来 macOS 移除了这些接口，对应开关会自动变灰，不会崩溃。")
+                Text("夜览：CoreBrightness 框架（系统设置自己也用它）\n锁定屏幕：login 框架的 SACLockScreenImmediate（不可用时退回「关闭显示器」）\n它们都只在本机调用系统自带功能；如果将来 macOS 移除了这些接口，对应开关会自动变灰，不会崩溃。")
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
             } header: {

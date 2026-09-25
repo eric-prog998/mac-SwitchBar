@@ -59,12 +59,9 @@ jobs:
       - name: 安全自查（编译出来的程序：联网函数、链接的框架、强化运行时、entitlements）
         run: ./scripts/audit-binary.sh dist/SwitchBar.app
 
-      - name: 启动测试（运行 5 秒不崩溃）
-        run: |
-          open dist/SwitchBar.app
-          sleep 5
-          pgrep -x SwitchBar
-          pkill -x SwitchBar
+      - name: 启动与资源占用测试（常驻内存、空闲 CPU）
+        timeout-minutes: 5
+        run: ./scripts/resource-test.sh dist/SwitchBar.app
 
       - name: 打包
         run: |
@@ -92,7 +89,7 @@ jobs:
              也可以先双击打开一次，被拦下后到「系统设置 › 隐私与安全性」底部点「仍要打开」。
           3. 打开 SwitchBar，菜单栏右上角会出现开关图标；图标被刘海挡住时按 ⌃⌥⌘S 打开面板。
 
-          从旧版本升级：先退出旧版，再用新版替换。「锁定键盘」用到的「辅助功能」权限需要在系统设置里删掉 SwitchBar 后重新添加。
+          从旧版本升级：先退出旧版，再用新版替换。「清洁屏幕」用到的「辅助功能」权限需要在系统设置里删掉 SwitchBar 后重新添加。
 
           ## 校验
 
