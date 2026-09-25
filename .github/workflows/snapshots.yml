@@ -38,7 +38,7 @@ jobs:
           mkdir -p docs/screenshots/ci
           cp "$RUNNER_TEMP/icon.iconset/icon_256x256.png" docs/screenshots/ci/app-icon.png
           cp "$SHOTS"/live-*.png docs/screenshots/ci/
-          cp "$SHOTS"/lock-cleaning.png docs/screenshots/ci/
+          cp "$SHOTS"/lock-cleaning.png "$SHOTS"/panel-light.png "$SHOTS"/panel-dark.png docs/screenshots/ci/
 
       - name: 提交截图
         run: |

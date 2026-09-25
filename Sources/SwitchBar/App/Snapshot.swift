@@ -10,7 +10,7 @@ import SwiftUI
 /// 并把窗口编号写进 windows-<阶段>.txt，由 CI 用 screencapture 截取真实效果（包括液态玻璃）。
 enum Snapshot {
     private static var directory = URL(fileURLWithPath: "/tmp")
-    private static var panel: MenuPanelController?
+    private static var panel: MenuPanelController<PanelView>?
 
     private struct Phase {
         let name: String

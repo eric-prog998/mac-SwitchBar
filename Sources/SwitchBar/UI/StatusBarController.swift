@@ -4,7 +4,7 @@ import SwiftUI
 /// 菜单栏图标：左键打开开关面板，右键弹出「设置 / 退出」
 final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
-    private let panel: MenuPanelController
+    private let panel: MenuPanelController<PanelView>
     private let store: SwitchStore
     /// 菜单栏上现在显示的是不是倒计时
     private var showsCountdown = false

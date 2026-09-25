@@ -6,9 +6,10 @@ import SwiftUI
 /// 用「不激活应用」的浮动面板实现：打开面板不会抢走当前应用的焦点，
 /// 点面板外任何地方、按 Esc、切换桌面空间都会自动关闭。
 /// 面板的窗口和界面只在打开时创建，关闭后立刻释放，平时不占内存、也不会在后台刷新。
-final class MenuPanelController {
-    private let makeContent: () -> NSView
+final class MenuPanelController<Content: View> {
+    private let makeContent: () -> Content
     private var panel: MenuPanelWindow?
+    private var hosting: NSHostingController<Content>?
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var spaceObserver: NSObjectProtocol?
@@ -21,31 +22,23 @@ final class MenuPanelController {
     /// 窗口编号（调试版截图用）
     var windowNumber: Int? { panel?.windowNumber }
 
-    init<Content: View>(content: @escaping () -> Content) {
-        makeContent = { NSHostingView(rootView: content()) }
+    init(content: @escaping () -> Content) {
+        makeContent = content
     }
 
     /// 在状态栏按钮下方显示；按钮不可见（比如被刘海挡住）时显示在屏幕右上角
     func show(below button: NSStatusBarButton?) {
         let panel = self.panel ?? makePanel()
         self.panel = panel
-        // 顺序很重要：先在窗口外量好界面需要的大小，再放进窗口，最后设置窗口大小。
-        // 放进空窗口后再量会得到 0×0；先设大小再放界面，窗口又会被缩回 0×0（面板就看不见了）。
-        let content = panel.contentView ?? makeContent()
-        var size = content.fittingSize
-        #if DEBUG
-        print("[panel] fitting before attach=\(size) intrinsic=\(content.intrinsicContentSize) frame=\(content.frame)")
-        #endif
-        if panel.contentView !== content {
-            panel.contentView = content
+        let hosting: NSHostingController<Content>
+        if let existing = self.hosting {
+            hosting = existing
+        } else {
+            hosting = NSHostingController(rootView: makeContent())
+            self.hosting = hosting
+            panel.contentViewController = hosting
         }
-        #if DEBUG
-        print("[panel] fitting after attach=\(content.fittingSize) window=\(panel.frame)")
-        #endif
-        if size.width < 1 || size.height < 1 {
-            content.layoutSubtreeIfNeeded()
-            size = content.fittingSize
-        }
+        let size = contentSize(of: hosting)
         let anchor = buttonFrameOnScreen(button)
         let screen = anchor.flatMap { frame in NSScreen.screens.first { $0.frame.intersects(frame) } }
             ?? NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
@@ -59,12 +52,6 @@ final class MenuPanelController {
         let y = max(top - size.height, visible.minY + margin)
 
         panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
-        #if DEBUG
-        print("[panel] size=\(size) window after setFrame=\(panel.frame)")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            print("[panel] window 0.5s later=\(panel.frame) content=\(content.frame) minSize=\(panel.contentMinSize) maxSize=\(panel.contentMaxSize)")
-        }
-        #endif
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
         panel.invalidateShadow()
@@ -82,9 +69,31 @@ final class MenuPanelController {
         // 面板里的按钮可能还在处理这次点击（比如点了「锁定屏幕」），等它处理完再释放界面
         DispatchQueue.main.async { [weak self] in
             guard let self, let current = self.panel, current === panel, !current.isVisible else { return }
-            current.contentView = nil
+            current.contentViewController = nil
+            self.hosting = nil
             self.panel = nil
         }
+    }
+
+    /// 界面需要的大小。刚创建的 SwiftUI 界面还没排过版，直接问 AppKit（fittingSize）会得到 0×0，
+    /// 所以直接让 SwiftUI 按内容算；万一还是算不出来，就先排一次版再量，最后兜底用固定大小，保证面板一定看得见。
+    private func contentSize(of hosting: NSHostingController<Content>) -> NSSize {
+        var size = hosting.sizeThatFits(in: NSSize(width: 10_000, height: 10_000))
+        #if DEBUG
+        print("[panel] sizeThatFits=\(size)")
+        #endif
+        if !Self.isUsable(size) {
+            hosting.view.layoutSubtreeIfNeeded()
+            size = hosting.view.fittingSize
+            #if DEBUG
+            print("[panel] fittingSize after layout=\(size)")
+            #endif
+        }
+        return Self.isUsable(size) ? size : NSSize(width: 356, height: 560)
+    }
+
+    private static func isUsable(_ size: NSSize) -> Bool {
+        size.width >= 100 && size.height >= 100 && size.width < 5_000 && size.height < 5_000
     }
 
     private func makePanel() -> MenuPanelWindow {
