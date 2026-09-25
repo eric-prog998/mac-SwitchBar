@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// 屏幕下方短暂出现的提示（类似系统调节音量时的提示框），用于快捷键操作的反馈和错误提示
+/// 屏幕下方短暂出现的提示（类似系统调节音量时的提示框），用于快捷键操作的反馈和错误提示。
+/// 提示消失后窗口和界面都会释放，平时不占内存。
 final class HUD {
     static let shared = HUD()
 
@@ -11,11 +12,12 @@ final class HUD {
     /// 窗口编号（调试版截图用）
     var windowNumber: Int? { panel?.windowNumber }
 
-    func show(_ text: String, symbol: String, duration: TimeInterval = 1.4) {
+    /// color 不为空时，图标用这个颜色显示（取色器用来展示取到的颜色）
+    func show(_ text: String, symbol: String, color: NSColor? = nil, duration: TimeInterval = 1.4) {
         let panel = self.panel ?? makePanel()
         self.panel = panel
 
-        let host = NSHostingView(rootView: HUDView(text: text, symbol: symbol))
+        let host = NSHostingView(rootView: HUDView(text: text, symbol: symbol, color: color.map(Color.init(nsColor:))))
         let size = host.fittingSize
         panel.contentView = host
 
@@ -39,11 +41,12 @@ final class HUD {
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.25
             panel.animator().alphaValue = 0
-        }, completionHandler: {
+        }, completionHandler: { [weak self] in
             // 渐隐过程中如果又显示了新提示，就不要把它藏起来
-            if panel.alphaValue < 0.01 {
-                panel.orderOut(nil)
-            }
+            guard let self, self.panel === panel, panel.alphaValue < 0.01 else { return }
+            panel.orderOut(nil)
+            panel.contentView = nil
+            self.panel = nil
         })
     }
 
@@ -65,12 +68,11 @@ final class HUD {
 struct HUDView: View {
     let text: String
     let symbol: String
+    var color: Color?
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: symbol)
-                .font(.system(size: 16, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
+            icon
                 .frame(width: 22)
             Text(text)
                 .font(.system(size: 13, weight: .medium))
@@ -81,5 +83,19 @@ struct HUDView: View {
         .padding(.vertical, 12)
         .frame(width: text.count > 18 ? 320 : nil, alignment: .leading)
         .panelBackground(cornerRadius: 22)
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        if let color {
+            Image(systemName: symbol)
+                .font(.system(size: 18))
+                .foregroundColor(color)
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.25), lineWidth: 1))
+        } else {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+        }
     }
 }

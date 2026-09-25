@@ -151,17 +151,19 @@ extension FeatureID {
     /// 设置列表里图标的颜色（和「系统设置」一样用系统色）
     var tint: Color {
         switch self {
-        case .hideDesktop, .bluetoothAudio, .displayResolution: return .blue
-        case .darkMode, .lockScreen: return .indigo
+        case .hideDesktop, .bluetoothAudio, .fileExtensions: return .blue
+        case .darkMode, .lockScreen, .sleepNow: return .indigo
         case .keepAwake: return .brown
-        case .doNotDisturb, .lockKeyboard: return .purple
-        case .nightShift, .ejectDisks: return .orange
-        case .trueTone: return .yellow
-        case .micMute, .muteSound, .audioOutput: return .red
+        case .doNotDisturb: return .purple
+        case .nightShift: return .orange
+        case .micMute, .audioOutput: return .red
         case .hiddenFiles: return .gray
         case .autoHideDock, .autoHideMenuBar: return .teal
+        case .displaySleep: return .gray
         case .cleanScreen: return .cyan
         case .screenSaver: return .mint
+        case .colorPicker: return .pink
+        case .plainText: return .green
         }
     }
 }
@@ -169,7 +171,6 @@ extension FeatureID {
 extension SceneID {
     var symbol: String {
         switch self {
-        case .present: return "display"
         case .focus: return "headphones"
         case .night: return "moon.stars.fill"
         }
@@ -177,7 +178,6 @@ extension SceneID {
 
     var tint: Color {
         switch self {
-        case .present: return .orange
         case .focus: return .indigo
         case .night: return .blue
         }
@@ -185,8 +185,17 @@ extension SceneID {
 }
 
 enum AppActivation {
-    /// 把 SwitchBar 带到前台（打开设置窗口、锁定界面时需要）
+    /// 把 SwitchBar 带到前台（打开设置窗口、清洁屏幕时需要）
     static func activate() {
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// 把焦点还给之前在用的应用
+    static func reactivate(_ app: NSRunningApplication) {
+        if #available(macOS 14.0, *) {
+            app.activate()
+        } else {
+            app.activate(options: [])
+        }
     }
 }

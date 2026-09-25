@@ -26,7 +26,7 @@ struct HotKey: Codable, Equatable {
 }
 
 extension FeatureID {
-    /// 推荐的快捷键：统一用 ⌃⌥ 加一个好记的字母（系统已经自带快捷键的功能不推荐）
+    /// 推荐的快捷键：统一用 ⌃⌥ 加一个好记的字母（系统已经自带顺手快捷键的功能、「睡眠」这种按错了很麻烦的不推荐）
     var recommendedHotKey: HotKey? {
         let key: Int
         switch self {
@@ -36,12 +36,13 @@ extension FeatureID {
         case .doNotDisturb: key = kVK_ANSI_N     // Notifications
         case .nightShift: key = kVK_ANSI_Y       // 夜 yè
         case .micMute: key = kVK_ANSI_M          // Mic
-        case .muteSound: key = kVK_ANSI_S        // Sound
         case .bluetoothAudio: key = kVK_ANSI_A   // AirPods
+        case .fileExtensions: key = kVK_ANSI_E   // Extensions
         case .autoHideMenuBar: key = kVK_ANSI_B  // menu Bar
-        case .lockKeyboard: key = kVK_ANSI_K     // Keyboard
+        case .displaySleep: key = kVK_ANSI_O     // Off
         case .cleanScreen: key = kVK_ANSI_Q      // 清 qīng
-        case .ejectDisks: key = kVK_ANSI_E       // Eject
+        case .colorPicker: key = kVK_ANSI_P      // Picker
+        case .plainText: key = kVK_ANSI_V        // 和粘贴 ⌘V 同一个键
         default: return nil
         }
         return HotKey(keyCode: UInt32(key), modifiers: UInt32(controlKey) | UInt32(optionKey))
@@ -78,7 +79,7 @@ enum HotKeyTarget: Hashable {
         }
     }
 
-    /// 推荐快捷键：场景用 ⌃⌥1/2/3，专注计时用 ⌃⌥T
+    /// 推荐快捷键：场景用 ⌃⌥1/2，专注计时用 ⌃⌥T
     var recommendedHotKey: HotKey? {
         let controlOption = UInt32(controlKey) | UInt32(optionKey)
         switch self {
@@ -86,7 +87,7 @@ enum HotKeyTarget: Hashable {
         case .feature(let feature): return feature.recommendedHotKey
         case .timer: return HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: controlOption)
         case .scene(let scene):
-            let keys: [SceneID: Int] = [.present: kVK_ANSI_1, .focus: kVK_ANSI_2, .night: kVK_ANSI_3]
+            let keys: [SceneID: Int] = [.focus: kVK_ANSI_1, .night: kVK_ANSI_2]
             return keys[scene].map { HotKey(keyCode: UInt32($0), modifiers: controlOption) }
         }
     }

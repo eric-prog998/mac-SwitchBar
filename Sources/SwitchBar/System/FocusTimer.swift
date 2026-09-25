@@ -55,6 +55,8 @@ final class FocusTimer {
                 self.onTick?()
             }
         }
+        // 允许系统稍微推迟，和别的唤醒合并，更省电
+        ticker.tolerance = 0.1
         // 放进 common 模式，打开菜单时倒计时也不会停
         RunLoop.main.add(ticker, forMode: .common)
         self.ticker = ticker

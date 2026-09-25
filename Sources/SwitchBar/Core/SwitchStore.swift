@@ -20,7 +20,6 @@ final class SwitchStore: ObservableObject {
     let inputLocker = InputLocker()
     let focusTimer = FocusTimer()
     private let nightShift = NightShift()
-    private let trueTone = TrueTone()
     private let bluetooth = BluetoothAudio()
 
     /// 关闭菜单栏弹出面板（由 StatusBarController 设置）
@@ -53,7 +52,7 @@ final class SwitchStore: ObservableObject {
 
     func isBusy(_ feature: FeatureID) -> Bool { busy.contains(feature) }
 
-    /// 重新读取系统里各个开关的真实状态
+    /// 重新读取系统里各个开关的真实状态（打开面板、切换场景前调用；平时不轮询）
     func refresh() {
         var s: [FeatureID: Bool] = [:]
         s[.hideDesktop] = Finder.isDesktopHidden
@@ -63,22 +62,18 @@ final class SwitchStore: ObservableObject {
         canReadFocusStatus = focus != nil
         s[.doNotDisturb] = focus ?? prefs.dndActive
         s[.nightShift] = nightShift.isEnabled
-        s[.trueTone] = trueTone.isEnabled
         s[.micMute] = AudioMute.input.isMuted
-        s[.muteSound] = AudioMute.output.isMuted
         // 没选过耳机就不碰蓝牙，避免一启动就弹出蓝牙权限请求
         s[.bluetoothAudio] = prefs.bluetoothAddress.isEmpty ? false : bluetooth.isConnected(address: prefs.bluetoothAddress)
         s[.hiddenFiles] = Finder.showsHiddenFiles
+        s[.fileExtensions] = Finder.showsAllExtensions
         s[.autoHideDock] = Dock.isAutoHidden
         s[.autoHideMenuBar] = MenuBar.isAutoHidden
-        s[.lockKeyboard] = inputLocker.mode == .keyboard
-        s[.cleanScreen] = inputLocker.mode == .cleaning
+        s[.cleanScreen] = inputLocker.isLocked
 
         var u: Set<FeatureID> = []
         if !nightShift.isSupported { u.insert(.nightShift) }
-        if !trueTone.isSupported { u.insert(.trueTone) }
         if !AudioMute.input.isAvailable { u.insert(.micMute) }
-        if !AudioMute.output.isAvailable { u.insert(.muteSound) }
 
         if s != states { states = s }
         if u != unavailable { unavailable = u }
@@ -102,11 +97,7 @@ final class SwitchStore: ObservableObject {
     /// 开关下面的一行状态文字，例如「开启」「还剩 42 分钟」「已连接」
     func stateText(for feature: FeatureID) -> String {
         if !isAvailable(feature) {
-            switch feature {
-            case .micMute: return "没有麦克风"
-            case .muteSound: return "没有输出设备"
-            default: return "此 Mac 不支持"
-            }
+            return feature == .micMute ? "没有麦克风" : "此 Mac 不支持"
         }
         if isBusy(feature) { return "正在切换…" }
         let on = isOn(feature)
@@ -114,7 +105,7 @@ final class SwitchStore: ObservableObject {
         case .keepAwake:
             guard on else { return "关闭" }
             return keepAwake.remainingMinutes.map { "还剩 \($0) 分钟" } ?? "一直保持"
-        case .micMute, .muteSound:
+        case .micMute:
             return on ? "已静音" : "未静音"
         case .bluetoothAudio:
             if prefs.bluetoothAddress.isEmpty { return "选择耳机" }
@@ -127,11 +118,7 @@ final class SwitchStore: ObservableObject {
     func tooltip(for feature: FeatureID) -> String {
         var parts = [feature.title]
         if !isAvailable(feature) {
-            switch feature {
-            case .micMute: parts.append("没有检测到麦克风")
-            case .muteSound: parts.append("没有检测到扬声器或耳机")
-            default: parts.append("这台 Mac 不支持")
-            }
+            parts.append(feature == .micMute ? "没有检测到麦克风" : "这台 Mac 不支持")
         }
         if feature == .keepAwake, keepAwake.isActive {
             parts.append(keepAwake.remainingMinutes.map { "还剩 \($0) 分钟" } ?? "一直保持中")
@@ -187,14 +174,6 @@ final class SwitchStore: ObservableObject {
                 report("无法切换夜览")
             }
 
-        case .trueTone:
-            let target = !trueTone.isEnabled
-            if trueTone.setEnabled(target) {
-                didToggle(feature, to: target, fromHotKey)
-            } else {
-                report("无法切换原彩显示")
-            }
-
         case .micMute:
             let target = !AudioMute.input.isMuted
             if AudioMute.input.setMuted(target) {
@@ -203,20 +182,17 @@ final class SwitchStore: ObservableObject {
                 report("当前输入设备不支持静音或调节音量")
             }
 
-        case .muteSound:
-            let target = !AudioMute.output.isMuted
-            if AudioMute.output.setMuted(target) {
-                didToggle(feature, to: target, fromHotKey)
-            } else {
-                report("当前输出设备不支持静音或调节音量")
-            }
-
         case .bluetoothAudio:
             toggleBluetooth(fromHotKey: fromHotKey)
 
         case .hiddenFiles:
             let target = !Finder.showsHiddenFiles
             Finder.setShowsHiddenFiles(target)
+            didToggle(feature, to: target, fromHotKey)
+
+        case .fileExtensions:
+            let target = !Finder.showsAllExtensions
+            Finder.setShowsAllExtensions(target)
             didToggle(feature, to: target, fromHotKey)
 
         case .autoHideDock:
@@ -236,25 +212,35 @@ final class SwitchStore: ObservableObject {
             }
 
         case .lockScreen:
-            closePanel?()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { ScreenLock.lock() }
+            afterClosingPanel { ScreenLock.lock() }
 
-        case .lockKeyboard:
-            startInputLock(.keyboard)
-
-        case .cleanScreen:
-            startInputLock(.cleaning)
-
-        case .ejectDisks:
-            ejectAll()
+        case .displaySleep:
+            afterClosingPanel { Power.displaySleepNow() }
 
         case .screenSaver:
-            closePanel?()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { ScreenSaver.start() }
+            afterClosingPanel { ScreenSaver.start() }
 
-        case .displayResolution, .audioOutput:
+        case .sleepNow:
+            afterClosingPanel { Power.sleepNow() }
+
+        case .cleanScreen:
+            startCleaning()
+
+        case .colorPicker:
+            afterClosingPanel { [weak self] in self?.pickColor() }
+
+        case .plainText:
+            makePlainText()
+
+        case .audioOutput:
             showOptionsMenu(for: feature)
         }
+    }
+
+    /// 先收起面板，等它消失后再执行（锁屏、关显示器、取色这些动作不应该被面板挡住）
+    private func afterClosingPanel(_ action: @escaping () -> Void) {
+        closePanel?()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: action)
     }
 
     /// 把某个开关切到指定状态（已经是这个状态就什么都不做）
@@ -269,6 +255,8 @@ final class SwitchStore: ObservableObject {
 
     func toggleScene(_ scene: SceneID, fromHotKey: Bool = false) {
         let turningOn = !activeScenes.contains(scene)
+        // 手动开关「专注」场景后，计时结束时就不再替你关掉它
+        if scene == .focus { timerActivatedFocus = false }
         if turningOn {
             activateScene(scene)
         } else {
@@ -280,6 +268,8 @@ final class SwitchStore: ObservableObject {
     }
 
     private func activateScene(_ scene: SceneID) {
+        // 先读一遍真实状态：你可能在系统设置里改过，用旧状态会把开关切反
+        refresh()
         let toTurnOn = prefs.members(of: scene).filter { isAvailable($0) && !isOn($0) }
         activeScenes.insert(scene)
         sceneChanges[scene] = toTurnOn
@@ -289,6 +279,7 @@ final class SwitchStore: ObservableObject {
     }
 
     private func deactivateScene(_ scene: SceneID) {
+        refresh()
         activeScenes.remove(scene)
         let changed = sceneChanges.removeValue(forKey: scene) ?? []
         // 其他还开着的场景也需要的开关，先不关
@@ -345,7 +336,7 @@ final class SwitchStore: ObservableObject {
         SettingsWindowController.shared.show(tab: tab)
     }
 
-    /// 退出时收尾：释放「保持亮屏」、解除键盘锁定
+    /// 退出时收尾：释放「保持亮屏」、解除清洁屏幕的锁定
     func shutdown() {
         focusTimer.onEnd = nil
         focusTimer.stop()
@@ -430,36 +421,30 @@ final class SwitchStore: ObservableObject {
         }
     }
 
-    // MARK: - 锁定键盘 / 清洁屏幕
+    // MARK: - 清洁屏幕
 
-    private func startInputLock(_ mode: InputLocker.Mode) {
+    private func startCleaning() {
         closePanel?()
-        inputLocker.startWhenModifiersReleased(mode) { [weak self] error in
+        inputLocker.startWhenModifiersReleased { [weak self] error in
             if let error { self?.report(error) }
         }
     }
 
-    // MARK: - 推出磁盘
+    // MARK: - 取色器、纯文本
 
-    private func ejectAll() {
-        eject(Disks.ejectableVolumes())
+    private func pickColor() {
+        ColorPicker.pick { hex, color in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(hex, forType: .string)
+            HUD.shared.show("已复制 \(hex)", symbol: "circle.fill", color: color)
+        }
     }
 
-    private func eject(_ volumes: [Disks.Volume]) {
-        guard !volumes.isEmpty else {
-            HUD.shared.show("没有可推出的磁盘", symbol: "eject")
-            return
-        }
-        busy.insert(.ejectDisks)
-        Disks.eject(volumes) { [weak self] failed in
-            guard let self else { return }
-            self.busy.remove(.ejectDisks)
-            if failed.isEmpty {
-                let text = volumes.count == 1 ? "已推出「\(volumes[0].name)」" : "已推出 \(volumes.count) 个磁盘"
-                HUD.shared.show(text, symbol: "eject.fill")
-            } else {
-                self.report("无法推出：\(failed.joined(separator: "、"))（可能有程序正在使用）")
-            }
+    private func makePlainText() {
+        if let count = Clipboard.makePlainText() {
+            HUD.shared.show("已去掉格式（\(count) 个字），现在粘贴就是纯文本", symbol: "doc.plaintext")
+        } else {
+            HUD.shared.show("剪贴板里没有文字", symbol: "doc.plaintext")
         }
     }
 
@@ -536,42 +521,14 @@ final class SwitchStore: ObservableObject {
             menu.addItem(.separator())
             menu.addItem(ClosureMenuItem("打开蓝牙设置…") { SystemSettings.open(.bluetooth) })
 
-        case .ejectDisks:
-            let volumes = Disks.ejectableVolumes()
-            if volumes.isEmpty {
-                menu.addItem(ClosureMenuItem("没有可推出的磁盘", handler: nil))
-            } else {
-                for volume in volumes {
-                    menu.addItem(ClosureMenuItem("推出「\(volume.name)」") { [weak self] in
-                        self?.eject([volume])
-                    })
-                }
-                if volumes.count > 1 {
-                    menu.addItem(.separator())
-                    menu.addItem(ClosureMenuItem("全部推出") { [weak self] in
-                        self?.eject(volumes)
-                    })
-                }
-            }
-
-        case .displayResolution:
-            let displays = Displays.all()
-            if displays.isEmpty {
-                menu.addItem(ClosureMenuItem("没有检测到显示器", handler: nil))
-            }
-            for (index, display) in displays.enumerated() {
-                if index > 0 { menu.addItem(.separator()) }
-                menu.addItem(ClosureMenuItem.header(display.name))
-                addModes(display.primaryModes, of: display, to: menu)
-                if !display.otherModes.isEmpty {
-                    let submenu = NSMenu()
-                    submenu.autoenablesItems = false
-                    addModes(display.otherModes, of: display, to: submenu)
-                    let more = NSMenuItem(title: "更多分辨率（非 HiDPI）", action: nil, keyEquivalent: "")
-                    more.submenu = submenu
-                    menu.addItem(more)
-                }
-            }
+        case .plainText:
+            menu.addItem(ClosureMenuItem("去掉剪贴板里的格式") { [weak self] in
+                self?.makePlainText()
+            })
+            menu.addItem(ClosureMenuItem("清空剪贴板") {
+                Clipboard.clear()
+                HUD.shared.show("剪贴板已清空", symbol: "trash")
+            })
 
         case .audioOutput:
             addAudioDevices(output: true, to: menu)
@@ -602,17 +559,6 @@ final class SwitchStore: ObservableObject {
                     self?.report("切换到「\(device.name)」失败")
                 }
             })
-        }
-    }
-
-    private func addModes(_ modes: [Displays.ModeOption], of display: Displays.Display, to menu: NSMenu) {
-        for option in modes {
-            let item = ClosureMenuItem(option.title, checked: option.isCurrent) { [weak self] in
-                if !Displays.apply(option.mode, to: display.id) {
-                    self?.report("切换分辨率失败")
-                }
-            }
-            menu.addItem(item)
         }
     }
 }

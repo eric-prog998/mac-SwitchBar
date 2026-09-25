@@ -28,9 +28,13 @@ final class KeepAwake {
         if minutes > 0 {
             let interval = TimeInterval(minutes * 60)
             endDate = Date().addingTimeInterval(interval)
-            timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
                 self?.stop()
             }
+            // 允许系统把这次唤醒和别的任务合并，更省电（晚几秒结束没有关系）
+            timer.tolerance = 5
+            RunLoop.main.add(timer, forMode: .common)
+            self.timer = timer
         }
         return true
     }

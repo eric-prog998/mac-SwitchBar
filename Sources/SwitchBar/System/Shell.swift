@@ -61,7 +61,7 @@ enum ForeignPrefs {
     }
 }
 
-/// 访达：隐藏桌面图标、显示隐藏文件
+/// 访达：隐藏桌面图标、显示隐藏文件、显示扩展名
 enum Finder {
     static var isDesktopHidden: Bool {
         !ForeignPrefs.bool("CreateDesktop", domain: "com.apple.finder", default: true)
@@ -71,18 +71,46 @@ enum Finder {
         ForeignPrefs.bool("AppleShowAllFiles", domain: "com.apple.finder", default: false)
     }
 
+    /// 「访达设置 › 高级 › 显示所有文件扩展名」，保存在全局偏好设置里
+    static var showsAllExtensions: Bool {
+        CFPreferencesAppSynchronize(kCFPreferencesAnyApplication)
+        // 从访达的偏好设置读：访达自己没设置时会自动退回全局设置，读到的就是访达实际使用的值
+        return ForeignPrefs.bool("AppleShowAllExtensions", domain: "com.apple.finder", default: false)
+    }
+
     static func setDesktopHidden(_ hidden: Bool) {
-        write("CreateDesktop", !hidden)
+        write(["com.apple.finder", "CreateDesktop"], !hidden)
     }
 
     static func setShowsHiddenFiles(_ show: Bool) {
-        write("AppleShowAllFiles", show)
+        write(["com.apple.finder", "AppleShowAllFiles"], show)
     }
 
-    /// 等价于终端里的 defaults write com.apple.finder … && killall Finder
-    private static func write(_ key: String, _ value: Bool) {
-        Shell.run("/usr/bin/defaults", ["write", "com.apple.finder", key, "-bool", value ? "true" : "false"])
+    static func setShowsAllExtensions(_ show: Bool) {
+        write(["-g", "AppleShowAllExtensions"], show)
+    }
+
+    /// 等价于终端里的 defaults write <域> <键> -bool … && killall Finder（访达重新打开后才会生效）
+    private static func write(_ domainAndKey: [String], _ value: Bool) {
+        Shell.run("/usr/bin/defaults", ["write"] + domainAndKey + ["-bool", value ? "true" : "false"])
         Shell.run("/usr/bin/killall", ["Finder"])
+    }
+}
+
+/// 关闭显示器、睡眠（和系统自带的 pmset 命令相同，不需要管理员权限）
+enum Power {
+    static func displaySleepNow() {
+        run("displaysleepnow")
+    }
+
+    static func sleepNow() {
+        run("sleepnow")
+    }
+
+    private static func run(_ command: String) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            Shell.run("/usr/bin/pmset", [command])
+        }
     }
 }
 

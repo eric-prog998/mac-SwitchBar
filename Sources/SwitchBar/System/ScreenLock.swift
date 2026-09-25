@@ -18,6 +18,6 @@ enum ScreenLock {
             _ = unsafeBitCast(symbol, to: LockFunction.self)()
             return
         }
-        Shell.run("/usr/bin/pmset", ["displaysleepnow"])
+        Power.displaySleepNow()
     }
 }
