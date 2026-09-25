@@ -56,6 +56,9 @@ jobs:
       - name: 构建（Apple 芯片 + Intel 通用版）
         run: UNIVERSAL=1 ./scripts/build-app.sh
 
+      - name: 安全自查（编译出来的程序：联网函数、链接的框架、强化运行时、entitlements）
+        run: ./scripts/audit-binary.sh dist/SwitchBar.app
+
       - name: 启动测试（运行 5 秒不崩溃）
         run: |
           open dist/SwitchBar.app

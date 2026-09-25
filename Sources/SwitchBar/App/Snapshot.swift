@@ -24,6 +24,8 @@ enum Snapshot {
         Phase(name: "dark", appearance: .darkAqua, tab: .features),
         Phase(name: "light-general", appearance: .aqua, tab: .general),
         Phase(name: "light-focus", appearance: .aqua, tab: .focus),
+        Phase(name: "light-security", appearance: .aqua, tab: .security),
+        Phase(name: "dark-security", appearance: .darkAqua, tab: .security),
         Phase(name: "light-about", appearance: .aqua, tab: .about),
     ]
 

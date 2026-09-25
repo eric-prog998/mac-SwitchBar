@@ -14,8 +14,10 @@ let package = Package(
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("Carbon"),
                 .linkedFramework("CoreAudio"),
+                .linkedFramework("CoreBluetooth"),
                 .linkedFramework("IOBluetooth"),
                 .linkedFramework("IOKit"),
+                .linkedFramework("Security"),
                 .linkedFramework("ServiceManagement"),
             ]
         ),

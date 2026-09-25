@@ -50,6 +50,7 @@ struct SettingsView: View {
                 case .features: FeaturesSettingsView(prefs: prefs)
                 case .general: GeneralSettingsView(prefs: prefs)
                 case .focus: FocusSettingsView(prefs: prefs)
+                case .security: SecurityView()
                 case .about: AboutView()
                 }
             }
@@ -69,6 +70,7 @@ struct SettingsView: View {
 private struct FeaturesSettingsView: View {
     @ObservedObject var prefs: Preferences
     @ObservedObject private var hotKeys = HotKeyManager.shared
+    @State private var recommendResult: String?
 
     var body: some View {
         List {
@@ -86,8 +88,24 @@ private struct FeaturesSettingsView: View {
                     HotKeyRecorder(target: .panel, prefs: prefs)
                 }
                 .padding(.vertical, 4)
+
+                HStack(spacing: 12) {
+                    SettingsIcon(symbol: "command", color: .purple)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("推荐快捷键")
+                        Text(recommendResult ?? "给常用开关统一设置 ⌃⌥ + 字母，例如 ⌃⌥D 深色模式、⌃⌥M 麦克风；不会覆盖已设置的")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("一键设置") {
+                        let count = prefs.applyRecommendedHotKeys()
+                        recommendResult = count == 0 ? "没有需要设置的：常用开关都已经有快捷键了" : "已设置 \(count) 个快捷键，可以在下面逐个修改"
+                    }
+                }
+                .padding(.vertical, 4)
             } header: {
-                Text("面板")
+                Text("面板与快捷键")
             }
 
             Section {
@@ -121,7 +139,7 @@ private struct FeatureRow: View {
             SettingsIcon(symbol: feature.symbol(on: true), color: feature.tint)
             VStack(alignment: .leading, spacing: 2) {
                 Text(feature.title)
-                Text(feature.detail)
+                Text(feature.systemShortcut.map { "\(feature.detail) · \($0)" } ?? feature.detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -157,7 +175,6 @@ private struct GeneralSettingsView: View {
 
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var loginNeedsApproval = LoginItem.needsApproval
-    @State private var accessibilityGranted = InputLocker.hasPermission
 
     var body: some View {
         Form {
@@ -212,24 +229,12 @@ private struct GeneralSettingsView: View {
             }
 
             Section {
-                PermissionRow(symbol: "accessibility", color: .blue, title: "辅助功能",
-                              detail: "「锁定键盘」「清洁屏幕」需要，用来暂时拦截按键",
-                              granted: accessibilityGranted) {
-                    InputLocker.requestPermission()
-                    SystemSettings.open(.accessibility)
+                HStack(spacing: 12) {
+                    SettingsIcon(symbol: "checkmark.shield.fill", color: .green)
+                    Text("SwitchBar 用到了哪些系统权限、怎么确认它不联网，见「安全与权限」。")
+                    Spacer()
+                    Button("查看") { SettingsRouter.shared.tab = .security }
                 }
-                PermissionRow(symbol: "gearshape.2.fill", color: .gray, title: "自动化 › 系统事件",
-                              detail: "「深色模式」「隐藏程序坞」需要，第一次使用时系统会询问",
-                              granted: nil) {
-                    SystemSettings.open(.automation)
-                }
-                PermissionRow(symbol: "headphones", color: .blue, title: "蓝牙",
-                              detail: "「蓝牙耳机」需要，第一次选择耳机时系统会询问",
-                              granted: nil) {
-                    SystemSettings.open(.bluetoothPrivacy)
-                }
-            } header: {
-                Text("系统权限（只在用到对应功能时才需要）")
             }
         }
         .formStyle(.grouped)
@@ -243,35 +248,6 @@ private struct GeneralSettingsView: View {
         let enabled = LoginItem.isEnabled
         if launchAtLogin != enabled { launchAtLogin = enabled }
         loginNeedsApproval = LoginItem.needsApproval
-        accessibilityGranted = InputLocker.hasPermission
-    }
-}
-
-private struct PermissionRow: View {
-    let symbol: String
-    let color: Color
-    let title: String
-    let detail: String
-    let granted: Bool?
-    let action: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            SettingsIcon(symbol: symbol, color: color)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if let granted {
-                Label(granted ? "已允许" : "未允许", systemImage: granted ? "checkmark.circle.fill" : "xmark.circle")
-                    .font(.caption)
-                    .foregroundColor(granted ? .green : .orange)
-            }
-            Button("打开设置", action: action)
-        }
     }
 }
 
@@ -338,6 +314,223 @@ private struct StepRow: View {
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+// MARK: - 安全与权限
+
+private struct SecurityView: View {
+    @State private var accessibility = SecurityCheck.State.notDetermined
+    @State private var automation = SecurityCheck.State.notDetermined
+    @State private var bluetooth = SecurityCheck.State.notDetermined
+    @State private var screenRecording = SecurityCheck.State.denied
+    @State private var inputMonitoring = SecurityCheck.State.denied
+    @State private var signature: CodeSignature.Info?
+    @State private var copied: String?
+
+    private static let lsofCommand = "lsof -i -a -p $(pgrep -x SwitchBar)"
+    private static let resetCommand = "tccutil reset All local.switchbar"
+
+    var body: some View {
+        Form {
+            Section {
+                PermissionStatusRow(symbol: "accessibility", color: .blue, title: "辅助功能",
+                                    usage: "锁定键盘、清洁屏幕：暂时拦截按键", state: accessibility, needed: true) {
+                    SystemSettings.open(.accessibility)
+                }
+                PermissionStatusRow(symbol: "gearshape.2.fill", color: .gray, title: "自动化 › 系统事件",
+                                    usage: "深色模式、隐藏程序坞、隐藏菜单栏", state: automation, needed: true) {
+                    SystemSettings.open(.automation)
+                }
+                PermissionStatusRow(symbol: "headphones", color: .blue, title: "蓝牙",
+                                    usage: "连接 / 断开你选择的耳机", state: bluetooth, needed: true) {
+                    SystemSettings.open(.bluetoothPrivacy)
+                }
+            } header: {
+                Text("SwitchBar 可能用到的权限")
+            } footer: {
+                Text("只有第一次使用对应功能时系统才会询问。用不到的功能可以在「功能与快捷键」里隐藏，再到系统设置里把权限关掉。")
+            }
+
+            Section {
+                PermissionStatusRow(symbol: "record.circle", color: .red, title: "屏幕录制",
+                                    usage: "SwitchBar 不需要，代码里也没有任何录屏功能", state: screenRecording, needed: false) {
+                    SystemSettings.open(.screenRecording)
+                }
+                PermissionStatusRow(symbol: "keyboard", color: .gray, title: "输入监控",
+                                    usage: "SwitchBar 不需要，快捷键用的是不需要权限的系统接口", state: inputMonitoring, needed: false) {
+                    SystemSettings.open(.inputMonitoring)
+                }
+                HStack(spacing: 12) {
+                    SettingsIcon(symbol: "nosign", color: .gray)
+                    Text("完全磁盘访问、麦克风、摄像头、定位、通讯录、照片：SwitchBar 从不申请")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } header: {
+                Text("SwitchBar 不需要的权限")
+            } footer: {
+                Text("如果这里出现「已允许」，说明系统设置里给了 SwitchBar 不需要的权限，建议点「去关闭」把它关掉。")
+            }
+
+            Section {
+                SecurityFactRow(symbol: "lock.shield.fill", color: signature?.hardenedRuntime == true ? .green : .orange,
+                                title: signature?.hardenedRuntime == true ? "强化运行时：已开启" : "强化运行时：未开启（调试版）",
+                                detail: "其他程序不能向 SwitchBar 注入代码、不能用调试器附加，所以没法借用 SwitchBar 已经拿到的权限。")
+                SecurityFactRow(symbol: "wifi.slash", color: .green, title: "不联网",
+                                detail: "程序里没有任何联网代码；每次构建时 CI 会同时检查源码和编译出来的程序，发现联网函数就直接失败。")
+                SecurityFactRow(symbol: "antenna.radiowaves.left.and.right.slash", color: .green, title: "不接受外部指令",
+                                detail: "没有网址协议、没有 AppleScript 接口、没有后台服务、不监听任何端口，别的程序或网络上的人都没法遥控它。")
+                SecurityFactRow(symbol: "keyboard.fill", color: .green, title: "不记录按键",
+                                detail: "锁定键盘时按键直接丢弃、不保存；全局快捷键只会收到你设置的那几个组合键。")
+                SecurityFactRow(symbol: "signature", color: .gray, title: "签名",
+                                detail: signatureText)
+            } header: {
+                Text("防护措施")
+            }
+
+            Section {
+                CommandRow(title: "确认没有网络连接",
+                           detail: "在「终端」运行下面的命令，没有任何输出就说明 SwitchBar 没有任何网络连接：",
+                           command: Self.lsofCommand, copied: $copied)
+                CommandRow(title: "一键撤销全部权限",
+                           detail: "在「终端」运行下面的命令，会清除 SwitchBar 获得的所有系统权限，下次用到时系统会重新询问：",
+                           command: Self.resetCommand, copied: $copied)
+            } header: {
+                Text("自己动手验证")
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear(perform: reload)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            reload()
+        }
+    }
+
+    private var signatureText: String {
+        guard let signature else { return "无法读取（可能是用 swift run 直接运行的开发版）" }
+        if let signer = signature.signer { return "由证书「\(signer)」签名" }
+        return signature.adHoc ? "临时签名（没有使用证书）" : "已签名"
+    }
+
+    private func reload() {
+        accessibility = SecurityCheck.accessibility
+        automation = SecurityCheck.automation
+        bluetooth = SecurityCheck.bluetooth
+        screenRecording = SecurityCheck.screenRecording
+        inputMonitoring = SecurityCheck.inputMonitoring
+        signature = CodeSignature.current()
+    }
+}
+
+private struct PermissionStatusRow: View {
+    let symbol: String
+    let color: Color
+    let title: String
+    let usage: String
+    let state: SecurityCheck.State
+    /// 是否是 SwitchBar 某些功能需要的权限
+    let needed: Bool
+    let open: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SettingsIcon(symbol: symbol, color: color)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(usage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Label(statusText, systemImage: statusSymbol)
+                .font(.caption)
+                .foregroundColor(statusColor)
+            if !needed && state == .granted {
+                Button("去关闭", action: open)
+            } else if needed {
+                Button("打开设置", action: open)
+            }
+        }
+    }
+
+    private var statusText: String {
+        switch (needed, state) {
+        case (true, .granted): return "已允许"
+        case (true, .denied): return "未允许"
+        case (true, .notDetermined): return "还没用过"
+        case (_, .unknown(let message)): return message
+        case (false, .granted): return "已允许，建议关闭"
+        case (false, _): return "未允许（正确）"
+        }
+    }
+
+    private var statusSymbol: String {
+        switch (needed, state) {
+        case (false, .granted): return "exclamationmark.triangle.fill"
+        case (false, _): return "checkmark.circle.fill"
+        case (true, .granted): return "checkmark.circle.fill"
+        default: return "circle.dashed"
+        }
+    }
+
+    private var statusColor: Color {
+        switch (needed, state) {
+        case (false, .granted): return .orange
+        case (false, _), (true, .granted): return .green
+        default: return .secondary
+        }
+    }
+}
+
+private struct SecurityFactRow: View {
+    let symbol: String
+    let color: Color
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            SettingsIcon(symbol: symbol, color: color)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+private struct CommandRow: View {
+    let title: String
+    let detail: String
+    let command: String
+    @Binding var copied: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Text(command)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
+                Spacer()
+                Button(copied == command ? "已复制" : "复制") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(command, forType: .string)
+                    copied = command
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
 

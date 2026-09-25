@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SwitchBar 的全部「特殊权利」（entitlements）。
+  应用以「强化运行时」（Hardened Runtime）签名：其他程序不能向 SwitchBar 注入代码、不能用调试器附加，
+  所以无法借用 SwitchBar 已获得的系统权限。
+  这里只打开一项：允许向「系统事件」发送 Apple Event（切换深色模式、程序坞、菜单栏需要）。
+  没有网络、摄像头、麦克风、定位、通讯录等任何其他权利。
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+</dict>
+</plist>

@@ -1,16 +1,28 @@
 import CoreAudio
 import Foundation
 
-/// 麦克风静音：直接设置当前默认输入设备的「静音」属性（公开的 CoreAudio 接口）。
-/// 有些设备不支持静音属性，就退而求其次把输入音量调到 0，取消静音时再恢复原音量。
+/// 静音麦克风 / 系统声音：直接设置当前默认输入或输出设备的「静音」属性（公开的 CoreAudio 接口）。
+/// 有些设备不支持静音属性，就退而求其次把音量调到 0，取消静音时再恢复原音量。
 /// 只改设备属性、不采集任何声音，所以不需要「麦克风」权限。
-enum Microphone {
-    private static let inputScope = kAudioObjectPropertyScopeInput
-    private static let mainElement = kAudioObjectPropertyElementMain
+struct AudioMute {
+    private let scope: AudioObjectPropertyScope
+    private let defaultDeviceSelector: AudioObjectPropertySelector
+    private let savedVolumes: ReferenceWritableKeyPath<Preferences, [Float]>
+    private let mainElement = kAudioObjectPropertyElementMain
 
-    static func defaultInputDevice() -> AudioDeviceID? {
+    /// 麦克风（默认输入设备）
+    static let input = AudioMute(scope: kAudioObjectPropertyScopeInput,
+                                 defaultDeviceSelector: kAudioHardwarePropertyDefaultInputDevice,
+                                 savedVolumes: \.savedMicVolumes)
+
+    /// 系统声音（默认输出设备）
+    static let output = AudioMute(scope: kAudioObjectPropertyScopeOutput,
+                                  defaultDeviceSelector: kAudioHardwarePropertyDefaultOutputDevice,
+                                  savedVolumes: \.savedOutputVolumes)
+
+    func defaultDevice() -> AudioDeviceID? {
         var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mSelector: defaultDeviceSelector,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: mainElement
         )
@@ -21,8 +33,10 @@ enum Microphone {
         return deviceID
     }
 
-    static var isMuted: Bool {
-        guard let device = defaultInputDevice() else { return false }
+    var isAvailable: Bool { defaultDevice() != nil }
+
+    var isMuted: Bool {
+        guard let device = defaultDevice() else { return false }
         if hasSettableMute(device) {
             return readMute(device) ?? false
         }
@@ -31,14 +45,14 @@ enum Microphone {
     }
 
     /// 返回是否成功
-    static func setMuted(_ muted: Bool) -> Bool {
-        guard let device = defaultInputDevice() else { return false }
+    func setMuted(_ muted: Bool) -> Bool {
+        guard let device = defaultDevice() else { return false }
         let prefs = Preferences.shared
 
         if hasSettableMute(device) {
             let ok = writeMute(device, muted)
             // 如果之前是用「音量调到 0」的方式静音的，这里顺便恢复音量
-            if ok, !muted, !prefs.savedMicVolumes.isEmpty {
+            if ok, !muted, !prefs[keyPath: savedVolumes].isEmpty {
                 restoreVolumes(device)
             }
             return ok
@@ -49,7 +63,7 @@ enum Microphone {
         if muted {
             let current = elements.map { readVolume(device, element: $0) ?? 0.8 }
             if current.contains(where: { $0 > 0.001 }) {
-                prefs.savedMicVolumes = current
+                prefs[keyPath: savedVolumes] = current
             }
             return elements.allSatisfy { writeVolume(device, element: $0, 0) }
         } else {
@@ -58,31 +72,31 @@ enum Microphone {
     }
 
     @discardableResult
-    private static func restoreVolumes(_ device: AudioDeviceID) -> Bool {
+    private func restoreVolumes(_ device: AudioDeviceID) -> Bool {
         let prefs = Preferences.shared
         let elements = volumeElements(device)
-        let saved = prefs.savedMicVolumes
+        let saved = prefs[keyPath: savedVolumes]
         var ok = true
         for (index, element) in elements.enumerated() {
-            let value = index < saved.count && saved[index] > 0.001 ? saved[index] : 0.8
+            let value = index < saved.count && saved[index] > 0.001 ? saved[index] : 0.6
             ok = writeVolume(device, element: element, value) && ok
         }
-        prefs.savedMicVolumes = []
+        prefs[keyPath: savedVolumes] = []
         return ok
     }
 
     // MARK: - 静音属性
 
-    private static func muteAddress() -> AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyMute, mScope: inputScope, mElement: mainElement)
+    private func muteAddress() -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyMute, mScope: scope, mElement: mainElement)
     }
 
-    private static func hasSettableMute(_ device: AudioDeviceID) -> Bool {
+    private func hasSettableMute(_ device: AudioDeviceID) -> Bool {
         var address = muteAddress()
         return isSettable(device, &address)
     }
 
-    private static func readMute(_ device: AudioDeviceID) -> Bool? {
+    private func readMute(_ device: AudioDeviceID) -> Bool? {
         var address = muteAddress()
         var value = UInt32(0)
         var size = UInt32(MemoryLayout<UInt32>.size)
@@ -90,21 +104,21 @@ enum Microphone {
         return value != 0
     }
 
-    private static func writeMute(_ device: AudioDeviceID, _ muted: Bool) -> Bool {
+    private func writeMute(_ device: AudioDeviceID, _ muted: Bool) -> Bool {
         var address = muteAddress()
         var value = UInt32(muted ? 1 : 0)
         let size = UInt32(MemoryLayout<UInt32>.size)
         return AudioObjectSetPropertyData(device, &address, 0, nil, size, &value) == noErr
     }
 
-    // MARK: - 输入音量
+    // MARK: - 音量
 
-    private static func volumeAddress(_ element: AudioObjectPropertyElement) -> AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyVolumeScalar, mScope: inputScope, mElement: element)
+    private func volumeAddress(_ element: AudioObjectPropertyElement) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyVolumeScalar, mScope: scope, mElement: element)
     }
 
     /// 可以调音量的声道：优先用主声道，否则逐个声道调
-    private static func volumeElements(_ device: AudioDeviceID) -> [AudioObjectPropertyElement] {
+    private func volumeElements(_ device: AudioDeviceID) -> [AudioObjectPropertyElement] {
         var main = volumeAddress(mainElement)
         if isSettable(device, &main) { return [mainElement] }
         var result: [AudioObjectPropertyElement] = []
@@ -115,7 +129,7 @@ enum Microphone {
         return result
     }
 
-    private static func readVolume(_ device: AudioDeviceID, element: AudioObjectPropertyElement) -> Float? {
+    private func readVolume(_ device: AudioDeviceID, element: AudioObjectPropertyElement) -> Float? {
         var address = volumeAddress(element)
         var value = Float32(0)
         var size = UInt32(MemoryLayout<Float32>.size)
@@ -123,14 +137,14 @@ enum Microphone {
         return value
     }
 
-    private static func writeVolume(_ device: AudioDeviceID, element: AudioObjectPropertyElement, _ volume: Float) -> Bool {
+    private func writeVolume(_ device: AudioDeviceID, element: AudioObjectPropertyElement, _ volume: Float) -> Bool {
         var address = volumeAddress(element)
         var value = Float32(volume)
         let size = UInt32(MemoryLayout<Float32>.size)
         return AudioObjectSetPropertyData(device, &address, 0, nil, size, &value) == noErr
     }
 
-    private static func isSettable(_ device: AudioDeviceID, _ address: inout AudioObjectPropertyAddress) -> Bool {
+    private func isSettable(_ device: AudioDeviceID, _ address: inout AudioObjectPropertyAddress) -> Bool {
         guard AudioObjectHasProperty(device, &address) else { return false }
         var settable: DarwinBoolean = false
         guard AudioObjectIsPropertySettable(device, &address, &settable) == noErr else { return false }

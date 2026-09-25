@@ -3,6 +3,7 @@ import AppKit
 /// 运行系统自带的命令行工具。
 /// 直接传参数数组、不经过 shell 解释，所以不存在命令注入问题。
 /// 用到的命令只有：defaults、killall、pmset、shortcuts（均为 macOS 自带，见 scripts/audit.sh 的输出）。
+/// 所有参数都是写死的或来自你自己的设置，不会执行任何外部传入的内容。
 enum Shell {
     struct Result {
         let status: Int32
@@ -107,6 +108,17 @@ enum Dock {
     }
 }
 
+/// 菜单栏自动隐藏（和「系统设置 › 控制中心 › 自动隐藏和显示菜单栏」是同一个设置）
+enum MenuBar {
+    static var isAutoHidden: Bool {
+        ForeignPrefs.bool("_HIHideMenuBar", domain: kCFPreferencesAnyApplication as String, default: false)
+    }
+
+    static func setAutoHide(_ hide: Bool) -> String? {
+        AppleScript.run("tell application \"System Events\" to set autohide menu bar of dock preferences to \(hide)")
+    }
+}
+
 /// 屏幕保护程序
 enum ScreenSaver {
     static func start() {
@@ -122,6 +134,8 @@ enum SystemSettings {
         case bluetoothPrivacy = "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth"
         case bluetooth = "x-apple.systempreferences:com.apple.BluetoothSettings"
         case loginItems = "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"
+        case screenRecording = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        case inputMonitoring = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
     }
 
     static func open(_ pane: Pane) {

@@ -54,9 +54,11 @@ if [ -n "${VERSION:-}" ]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" "$APP/Contents/Info.plist"
 fi
 
-echo "==> 签名（身份：${SIGN_IDENTITY}）"
-codesign --force --sign "$SIGN_IDENTITY" --identifier "$BUNDLE_ID" "$APP"
-codesign --verify --verbose=1 "$APP"
+echo "==> 签名（身份：${SIGN_IDENTITY}，强化运行时）"
+# --options runtime：强化运行时，禁止其他程序注入代码或调试附加，防止借用 SwitchBar 的系统权限
+codesign --force --options runtime --entitlements "$ROOT/Resources/SwitchBar.entitlements" \
+  --sign "$SIGN_IDENTITY" --identifier "$BUNDLE_ID" "$APP"
+codesign --verify --strict --verbose=1 "$APP"
 
 if [ "$SIGN_IDENTITY" = "-" ]; then
   echo
