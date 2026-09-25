@@ -33,9 +33,15 @@ final class MenuPanelController {
         // 放进空窗口后再量会得到 0×0；先设大小再放界面，窗口又会被缩回 0×0（面板就看不见了）。
         let content = panel.contentView ?? makeContent()
         var size = content.fittingSize
+        #if DEBUG
+        print("[panel] fitting before attach=\(size) intrinsic=\(content.intrinsicContentSize) frame=\(content.frame)")
+        #endif
         if panel.contentView !== content {
             panel.contentView = content
         }
+        #if DEBUG
+        print("[panel] fitting after attach=\(content.fittingSize) window=\(panel.frame)")
+        #endif
         if size.width < 1 || size.height < 1 {
             content.layoutSubtreeIfNeeded()
             size = content.fittingSize
@@ -53,6 +59,12 @@ final class MenuPanelController {
         let y = max(top - size.height, visible.minY + margin)
 
         panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
+        #if DEBUG
+        print("[panel] size=\(size) window after setFrame=\(panel.frame)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            print("[panel] window 0.5s later=\(panel.frame) content=\(content.frame) minSize=\(panel.contentMinSize) maxSize=\(panel.contentMaxSize)")
+        }
+        #endif
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
         panel.invalidateShadow()
