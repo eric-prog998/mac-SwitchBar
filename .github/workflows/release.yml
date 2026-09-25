@@ -59,12 +59,9 @@ jobs:
       - name: 安全自查（编译出来的程序：联网函数、链接的框架、强化运行时、entitlements）
         run: ./scripts/audit-binary.sh dist/SwitchBar.app
 
-      - name: 启动测试（运行 5 秒不崩溃）
-        run: |
-          open dist/SwitchBar.app
-          sleep 5
-          pgrep -x SwitchBar
-          pkill -x SwitchBar
+      - name: 启动与资源占用测试（常驻内存、空闲 CPU）
+        timeout-minutes: 5
+        run: ./scripts/resource-test.sh dist/SwitchBar.app
 
       - name: 打包
         run: |

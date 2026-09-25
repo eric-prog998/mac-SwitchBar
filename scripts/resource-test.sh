@@ -1,7 +1,7 @@
 #!/bin/bash
 # 启动与资源占用测试：启动 SwitchBar，等它空闲下来，测量常驻时的内存、CPU 和唤醒次数。
 # 超过下面的上限就返回失败（CI 会变红），防止以后的改动让 SwitchBar 变「重」。
-# 用法：./scripts/resource-test.sh [dist/SwitchBar.app]
+# 用法：./scripts/resource-test.sh [dist/SwitchBar.app]（会先退出正在运行的 SwitchBar，测完也会退出，主要给 CI 用）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
