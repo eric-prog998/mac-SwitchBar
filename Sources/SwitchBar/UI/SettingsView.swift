@@ -249,17 +249,27 @@ private struct GeneralSettingsView: View {
 
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var loginNeedsApproval = LoginItem.needsApproval
+    @State private var loginError: String?
 
     var body: some View {
         Form {
             Section {
                 HStack(spacing: 12) {
                     SettingsIcon(symbol: "power", color: .green)
-                    Toggle("登录时自动启动 SwitchBar", isOn: $launchAtLogin)
-                        .onChange(of: launchAtLogin) { newValue in
-                            LoginItem.set(newValue)
+                    // 只在你点开关时去改登录项；读回来的状态只用来显示，不会反过来再改一次
+                    // （以前用 onChange，读到「待允许」时会把刚登记的登录项又取消掉）
+                    Toggle("登录时自动启动 SwitchBar", isOn: Binding(
+                        get: { launchAtLogin },
+                        set: { newValue in
+                            loginError = LoginItem.set(newValue)
                             reload()
                         }
+                    ))
+                }
+                if let loginError {
+                    Text(loginError)
+                        .font(.caption)
+                        .foregroundColor(.red)
                 }
                 if !LoginItem.isInApplicationsFolder {
                     Text("建议先把 SwitchBar 放进「应用程序」文件夹再开启，否则移动位置后自动启动会失效。")
@@ -319,8 +329,7 @@ private struct GeneralSettingsView: View {
     }
 
     private func reload() {
-        let enabled = LoginItem.isEnabled
-        if launchAtLogin != enabled { launchAtLogin = enabled }
+        launchAtLogin = LoginItem.isEnabled
         loginNeedsApproval = LoginItem.needsApproval
     }
 }

@@ -8,9 +8,14 @@ import SwiftUI
 /// 用法：SWITCHBAR_SNAPSHOT_DIR=/tmp/shots .build/debug/SwitchBar
 /// 另加 SWITCHBAR_SNAPSHOT_LIVE=1 时，会把真实的面板、设置窗口、提示框依次显示在屏幕上，
 /// 并把窗口编号写进 windows-<阶段>.txt，由 CI 用 screencapture 截取真实效果（包括液态玻璃）。
+///
+/// 截图之前还会检查「常驻很轻」的几个前提：面板、设置窗口、提示框关掉后界面真的被释放了，
+/// 反复打开面板后空闲时的唤醒次数不会变多（界面里的每秒刷新没有留在后台），清洁屏幕的窗口大小正确。
+/// 任何一项不通过，程序以失败状态退出，CI 会变红。
 enum Snapshot {
     private static var directory = URL(fileURLWithPath: "/tmp")
     private static var panel: MenuPanelController<PanelView>?
+    private static var failures: [String] = []
 
     private struct Phase {
         let name: String
@@ -37,6 +42,9 @@ enum Snapshot {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let store = SwitchStore.shared
+        // 先在「什么都没开」的状态下检查释放和空闲唤醒（开着计时器时每秒都会唤醒，没法比较）
+        checkReleases(store)
+
         store.keepAwake.start(minutes: 60) // 让截图里有「开启」的开关、场景和计时
         store.debugMarkSceneActive(.focus)
         store.debugStartTimer(minutes: 25)
@@ -44,7 +52,6 @@ enum Snapshot {
         print("states: \(store.states.map { "\($0.key.rawValue)=\($0.value)" }.sorted())")
         print("unavailable: \(store.unavailable.map(\.rawValue).sorted())")
 
-        checkPanelRelease(store)
         renderStatic(store)
 
         if environment["SWITCHBAR_SNAPSHOT_LIVE"] != nil {
@@ -56,32 +63,99 @@ enum Snapshot {
         return true
     }
 
-    // MARK: - 面板反复打开 / 关闭后内存要能回收
+    // MARK: - 关掉的界面要真的释放，空闲时不能有残留的刷新
 
-    private static func checkPanelRelease(_ store: SwitchStore) {
-        let panel = MenuPanelController { PanelView(store: store, prefs: store.prefs) }
-        func cycle() {
-            panel.show(below: nil)
-            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-            panel.close()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-        }
-        cycle() // 第一次打开会加载 SwiftUI 等框架，不算
-        let before = footprintMB()
-        for _ in 0..<10 { cycle() }
-        let after = footprintMB()
-        print(String(format: "panel open/close x10: footprint %.1f MB -> %.1f MB, window released: %@",
-                     before, after, panel.windowNumber == nil ? "yes" : "no"))
+    private struct Usage {
+        let footprintMB: Double
+        let cpuSeconds: Double
+        let wakeups: UInt64
     }
 
-    private static func footprintMB() -> Double {
+    private static func usage() -> Usage {
         var info = rusage_info_v4()
         let result = withUnsafeMutablePointer(to: &info) { pointer in
             pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
                 proc_pid_rusage(getpid(), RUSAGE_INFO_V4, $0)
             }
         }
-        return result == 0 ? Double(info.ri_phys_footprint) / 1_048_576 : -1
+        guard result == 0 else { return Usage(footprintMB: -1, cpuSeconds: -1, wakeups: 0) }
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        let ticks = Double(info.ri_user_time + info.ri_system_time)
+        return Usage(footprintMB: Double(info.ri_phys_footprint) / 1_048_576,
+                     cpuSeconds: ticks * Double(timebase.numer) / Double(timebase.denom) / 1_000_000_000,
+                     wakeups: info.ri_pkg_idle_wkups + info.ri_interrupt_wkups)
+    }
+
+    private static func spin(_ seconds: TimeInterval) {
+        RunLoop.main.run(until: Date().addingTimeInterval(seconds))
+    }
+
+    /// 空闲 seconds 秒期间的唤醒次数和 CPU 时间
+    private static func idle(_ seconds: TimeInterval) -> (wakeups: UInt64, cpu: Double) {
+        let start = usage()
+        spin(seconds)
+        let end = usage()
+        return (end.wakeups - start.wakeups, end.cpuSeconds - start.cpuSeconds)
+    }
+
+    private static func check(_ ok: Bool, _ message: String) {
+        print("[check] \(ok ? "OK" : "FAIL") \(message)")
+        if !ok { failures.append(message) }
+    }
+
+    private static func checkReleases(_ store: SwitchStore) {
+        // 面板：关掉后界面控制器要被释放
+        let panel = MenuPanelController { PanelView(store: store, prefs: store.prefs) }
+        panel.show(below: nil)
+        spin(0.3)
+        weak var hosting = panel.debugHosting
+        check(hosting != nil, "面板打开后有界面")
+        panel.close()
+        spin(0.3)
+        check(hosting == nil && panel.windowNumber == nil, "面板关闭后界面和窗口已释放")
+
+        // 反复打开 / 关闭 20 次：内存不能一直涨，空闲唤醒不能变多
+        let baseline = idle(3)
+        let before = usage()
+        for _ in 0..<20 {
+            panel.show(below: nil)
+            spin(0.2)
+            panel.close()
+            spin(0.2)
+        }
+        spin(0.5)
+        let after = usage()
+        let afterIdle = idle(3)
+        print(String(format: "[check] panel x20: footprint %.1f -> %.1f MB; idle 3s wakeups %llu -> %llu, cpu %.3f -> %.3f s",
+                     before.footprintMB, after.footprintMB, baseline.wakeups, afterIdle.wakeups,
+                     baseline.cpu, afterIdle.cpu))
+        check(after.footprintMB - before.footprintMB < 8, "面板开关 20 次后内存没有明显增长")
+        check(afterIdle.wakeups <= baseline.wakeups + 15, "面板开关 20 次后空闲唤醒没有变多")
+        check(afterIdle.cpu < 0.05, "面板开关 20 次后空闲 3 秒 CPU < 0.05 秒")
+
+        // 设置窗口：关掉后释放
+        SettingsWindowController.shared.show(tab: .general)
+        spin(0.5)
+        let settingsNumber = SettingsWindowController.shared.windowNumber
+        weak var settingsWindow = NSApp.windows.first { $0.windowNumber == settingsNumber }
+        check(settingsWindow != nil, "设置窗口能打开")
+        settingsWindow?.performClose(nil)
+        spin(0.5)
+        check(SettingsWindowController.shared.windowNumber == nil && settingsWindow == nil, "设置窗口关闭后已释放")
+
+        // 提示框：消失后释放
+        HUD.shared.show("测试", symbol: "checkmark", duration: 0.2)
+        spin(1.2)
+        check(HUD.shared.windowNumber == nil, "提示框消失后已释放")
+
+        // 清洁屏幕的黑屏窗口：大小要和屏幕一致（界面放进窗口后不能把窗口缩小）
+        let frame = NSRect(x: 100, y: 100, width: 800, height: 500)
+        let overlay = InputLocker.makeOverlayWindow(frame: frame, showsControls: true) {}
+        overlay.orderFrontRegardless()
+        spin(0.3)
+        check(overlay.frame.size == frame.size, "清洁屏幕窗口大小正确（\(overlay.frame.size)）")
+        overlay.orderOut(nil)
     }
 
     // MARK: - 离屏渲染
@@ -170,6 +244,11 @@ enum Snapshot {
     private static func finish() {
         print("snapshots written to \(directory.path)")
         SwitchStore.shared.keepAwake.stop(notify: false)
+        if !failures.isEmpty {
+            print("检查没有通过：\(failures.joined(separator: "；"))")
+            fflush(stdout)
+            exit(1)
+        }
         NSApp.terminate(nil)
     }
 }

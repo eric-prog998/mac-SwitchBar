@@ -165,10 +165,7 @@ private struct ToggleRow: View {
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.primary)
                             .lineLimit(1)
-                        Text(store.stateText(for: feature))
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        stateLabel
                     }
                     Spacer(minLength: 0)
                 }
@@ -201,6 +198,25 @@ private struct ToggleRow: View {
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.15), value: on)
         .help(store.tooltip(for: feature))
+    }
+
+    /// 状态文字；「保持亮屏」的剩余时间在面板开着时也要跟着走
+    @ViewBuilder
+    private var stateLabel: some View {
+        if feature == .keepAwake && store.isOn(.keepAwake) {
+            TimelineView(.periodic(from: .now, by: 10)) { _ in
+                stateText
+            }
+        } else {
+            stateText
+        }
+    }
+
+    private var stateText: some View {
+        Text(store.stateText(for: feature))
+            .font(.system(size: 10.5))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
     }
 }
 
