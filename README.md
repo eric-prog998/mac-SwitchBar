@@ -15,7 +15,7 @@
 
 | | SwitchBar 的做法 |
 |---|---|
-| 源码 | 源码公开（source-available），约 4700 行 Swift，可自行审查、自己编译；不是 OSI 意义上的开源软件 |
+| 源码 | **MIT 开源许可（OSI Approved）**，约 4700 行 Swift，可自行审查、修改和编译 |
 | 网络 | **代码里没有任何网络请求**。`scripts/audit.sh` 会检查，CI 里如果发现网络代码会直接失败 |
 | 依赖 | 零第三方依赖，只用苹果系统框架（`Package.swift` 里没有 dependencies） |
 | 数据 | 设置只保存在本机 `~/Library/Preferences/local.switchbar.plist` |
@@ -265,11 +265,9 @@ Sources/SwitchBar/
 
 ## 许可与版权
 
-Copyright © 2026 **Eric D**. All rights reserved.
+Copyright © 2026 **Eric D**.
 
-本项目是**源码公开（source-available）**软件，不是 OSI 意义上的开源软件。你可以下载、安装、运行，并为**个人、非商业用途**在本地修改；未经 Eric D 书面许可，不得重新发布、镜像、共享源码或安装包，不得分发修改版，不得改名/换品牌后发布或出售，也不得用于商业用途。
-
-完整条款见 [LICENSE](LICENSE)。
+本项目采用 [MIT License](LICENSE)，属于 OSI 认可的开源软件。你可以使用、复制、修改、合并、发布、分发、再许可及商业使用，但必须在软件的副本或主要部分中保留原版权声明和 MIT 许可声明。
 
 SwitchBar 是独立项目，与 One Switch / Fireball Studio 无隶属、授权或背书关系；项目中提及 One Switch 仅用于说明功能参考。
 
