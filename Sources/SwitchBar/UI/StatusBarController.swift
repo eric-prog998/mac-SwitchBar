@@ -4,12 +4,15 @@ import SwiftUI
 /// 菜单栏图标：左键打开开关面板，右键弹出「设置 / 退出」
 final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
-    private let popover = NSPopover()
+    private let panel: MenuPanelController
     private let store: SwitchStore
 
     init(store: SwitchStore) {
         self.store = store
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        // 记住位置：按住 ⌘ 拖动过图标后，下次启动仍在原处（有刘海的屏幕上可以把它挪到不被挡住的地方）
+        statusItem.autosaveName = "SwitchBarStatusItem"
+        panel = MenuPanelController(rootView: PanelView(store: store, prefs: store.prefs))
         super.init()
 
         if let button = statusItem.button {
@@ -19,16 +22,23 @@ final class StatusBarController: NSObject {
             button.target = self
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            panel.statusButtonWindow = button.window
         }
-
-        let hosting = NSHostingController(rootView: PanelView(store: store, prefs: store.prefs))
-        hosting.sizingOptions = [.preferredContentSize]
-        popover.contentViewController = hosting
-        popover.behavior = .transient
 
         store.closePanel = { [weak self] in
-            self?.closePopover()
+            self?.panel.close()
         }
+    }
+
+    /// 打开或关闭面板（点图标、按快捷键都走这里）
+    func togglePanel() {
+        if panel.isShown {
+            panel.close()
+            return
+        }
+        store.refresh()
+        panel.statusButtonWindow = statusItem.button?.window
+        panel.show(below: statusItem.button)
     }
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
@@ -36,29 +46,12 @@ final class StatusBarController: NSObject {
         if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
             showContextMenu()
         } else {
-            togglePopover()
-        }
-    }
-
-    private func togglePopover() {
-        if popover.isShown {
-            closePopover()
-            return
-        }
-        guard let button = statusItem.button else { return }
-        store.refresh()
-        NSApp.activate(ignoringOtherApps: true)
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-    }
-
-    private func closePopover() {
-        if popover.isShown {
-            popover.performClose(nil)
+            togglePanel()
         }
     }
 
     private func showContextMenu() {
-        closePopover()
+        panel.close()
         guard let button = statusItem.button else { return }
         let menu = NSMenu()
         menu.addItem(ClosureMenuItem("设置…") { [weak self] in
@@ -87,5 +80,13 @@ final class ClosureMenuItem: NSMenuItem {
 
     @objc private func fire() {
         handler?()
+    }
+
+    /// 菜单里的小标题
+    static func header(_ title: String) -> NSMenuItem {
+        if #available(macOS 14.0, *) {
+            return NSMenuItem.sectionHeader(title: title)
+        }
+        return ClosureMenuItem(title, handler: nil)
     }
 }

@@ -24,9 +24,9 @@ enum Displays {
             let options = modeOptions(for: id, current: current)
             let hiDPI = options.filter { isHiDPI($0.mode) }
             if hiDPI.isEmpty {
-                return Display(id: id, name: name(for: id), primaryModes: options, otherModes: [])
+                return Display(id: id, name: name(for: id), primaryModes: labelled(options), otherModes: [])
             }
-            return Display(id: id, name: name(for: id), primaryModes: hiDPI,
+            return Display(id: id, name: name(for: id), primaryModes: labelled(hiDPI),
                            otherModes: options.filter { !isHiDPI($0.mode) })
         }
     }
@@ -83,6 +83,21 @@ enum Displays {
         }
         return sorted.map { mode in
             ModeOption(mode: mode, title: title(for: mode), isCurrent: current?.ioDisplayModeID == mode.ioDisplayModeID)
+        }
+    }
+
+    /// 像「系统设置」一样，在最大和最小的选项后面注明「更多空间」「更大字体」
+    private static func labelled(_ options: [ModeOption]) -> [ModeOption] {
+        guard options.count >= 3 else { return options }
+        return options.enumerated().map { index, option in
+            guard !option.title.contains("默认") else { return option }
+            if index == 0 {
+                return ModeOption(mode: option.mode, title: option.title + "（更多空间）", isCurrent: option.isCurrent)
+            }
+            if index == options.count - 1 {
+                return ModeOption(mode: option.mode, title: option.title + "（更大字体）", isCurrent: option.isCurrent)
+            }
+            return option
         }
     }
 

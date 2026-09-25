@@ -2,6 +2,7 @@ name: Build
 
 on:
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 
@@ -13,7 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15]
+        # macos-14：确认旧版 Xcode 也能编译；macos-26：用新版 Xcode 编译液态玻璃界面
+        os: [macos-14, macos-26]
     runs-on: ${{ matrix.os }}
     steps:
       # 第三方 Action 固定到具体的提交，防止被篡改
@@ -23,7 +25,9 @@ jobs:
         run: ./scripts/audit.sh
 
       - name: 工具链版本
-        run: swift --version
+        run: |
+          xcodebuild -version
+          swift --version
 
       - name: 构建（Apple 芯片 + Intel 通用版）
         run: UNIVERSAL=1 ./scripts/build-app.sh
@@ -41,23 +45,15 @@ jobs:
           pgrep -x SwitchBar
           pkill -x SwitchBar
 
+      - name: 界面渲染测试（调试版）
+        timeout-minutes: 5
+        run: |
+          swift build
+          SWITCHBAR_SNAPSHOT_DIR="$RUNNER_TEMP/snapshots" .build/debug/SwitchBar
+          ls "$RUNNER_TEMP/snapshots"
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SwitchBar-${{ matrix.os }}
           path: dist/SwitchBar.zip
           retention-days: 14
-
-      - name: 界面截图（调试版）
-        if: matrix.os == 'macos-15'
-        timeout-minutes: 5
-        run: |
-          swift build
-          SWITCHBAR_SNAPSHOT_DIR="$PWD/snapshots" .build/debug/SwitchBar
-          ls -la snapshots
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: matrix.os == 'macos-15'
-        with:
-          name: snapshots
-          path: snapshots
-          retention-days: 7

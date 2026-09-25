@@ -1,0 +1,51 @@
+# 临时：在 macOS 26 上截取真实界面（包括液态玻璃效果），提交到 docs/screenshots 供检查。检查完会删除这个文件。
+name: Snapshots
+
+on:
+  push:
+    branches: [claude/ui-refresh-release]
+    paths: ['Sources/**', 'scripts/make-icon.swift', '.github/workflows/snapshots.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  snapshots:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: 渲染并截图
+        run: |
+          xcodebuild -version
+          swift build
+          SHOTS="$RUNNER_TEMP/shots"
+          mkdir -p "$SHOTS"
+          SWITCHBAR_SNAPSHOT_DIR="$SHOTS" SWITCHBAR_SNAPSHOT_LIVE=1 .build/debug/SwitchBar > "$SHOTS/log.txt" 2>&1 &
+          PID=$!
+          for i in $(seq 1 240); do [ -f "$SHOTS/phases.txt" ] && break; sleep 0.5; done
+          while read -r phase; do
+            for i in $(seq 1 120); do [ -f "$SHOTS/windows-$phase.txt" ] && break; sleep 0.5; done
+            while read -r name id; do
+              screencapture -x -l "$id" "$SHOTS/live-$name-$phase.png" || echo "截图失败：$name"
+            done < "$SHOTS/windows-$phase.txt"
+            touch "$SHOTS/captured-$phase"
+          done < "$SHOTS/phases.txt"
+          wait $PID || true
+          cat "$SHOTS/log.txt"
+          screencapture -x "$SHOTS/fullscreen.png" || true
+          swift scripts/make-icon.swift "$RUNNER_TEMP/icon.iconset"
+          cp "$RUNNER_TEMP/icon.iconset/icon_256x256.png" "$SHOTS/app-icon.png"
+          rm -rf docs/screenshots/ci
+          mkdir -p docs/screenshots/ci
+          cp "$SHOTS"/*.png docs/screenshots/ci/
+          ls -la docs/screenshots/ci
+
+      - name: 提交截图
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots/ci
+          git commit -m "Update UI screenshots [skip ci]" || exit 0
+          git push origin "HEAD:${GITHUB_REF_NAME}"

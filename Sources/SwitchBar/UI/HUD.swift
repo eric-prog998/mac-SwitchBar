@@ -8,6 +8,9 @@ final class HUD {
     private var panel: NSPanel?
     private var hideWork: DispatchWorkItem?
 
+    /// 窗口编号（调试版截图用）
+    var windowNumber: Int? { panel?.windowNumber }
+
     func show(_ text: String, symbol: String, duration: TimeInterval = 1.4) {
         let panel = self.panel ?? makePanel()
         self.panel = panel
@@ -18,11 +21,12 @@ final class HUD {
 
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
         if let frame = screen?.visibleFrame {
-            let origin = NSPoint(x: frame.midX - size.width / 2, y: frame.minY + frame.height * 0.16)
+            let origin = NSPoint(x: frame.midX - size.width / 2, y: frame.minY + frame.height * 0.14)
             panel.setFrame(NSRect(origin: origin, size: size), display: true)
         }
         panel.alphaValue = 1
         panel.orderFrontRegardless()
+        panel.invalidateShadow()
 
         hideWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.fadeOut() }
@@ -48,7 +52,7 @@ final class HUD {
                             backing: .buffered, defer: true)
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = false
+        panel.hasShadow = true
         panel.level = .statusBar
         panel.ignoresMouseEvents = true
         panel.hidesOnDeactivate = false
@@ -58,14 +62,15 @@ final class HUD {
     }
 }
 
-private struct HUDView: View {
+struct HUDView: View {
     let text: String
     let symbol: String
 
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: symbol)
-                .font(.system(size: 34, weight: .medium))
+                .font(.system(size: 32, weight: .medium))
+                .frame(height: 38)
             Text(text)
                 .font(.system(size: 13, weight: .medium))
                 .multilineTextAlignment(.center)
@@ -74,7 +79,7 @@ private struct HUDView: View {
         .padding(.horizontal, 22)
         .padding(.vertical, 18)
         .frame(width: text.count > 12 ? 300 : nil)
-        .frame(minWidth: 150)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .frame(minWidth: 160)
+        .panelBackground(cornerRadius: 26)
     }
 }

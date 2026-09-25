@@ -1,0 +1,85 @@
+# 发布流程：推送 v 开头的标签（例如 v1.0.0）时，在 macOS 上构建 SwitchBar.app，
+# 打成 zip 连同 SHA-256 校验值一起上传到 GitHub Releases。
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # 创建 Release、上传文件需要
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: 安全自查（不允许出现网络代码和第三方依赖）
+        run: ./scripts/audit.sh
+
+      - name: 工具链版本
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: 构建（Apple 芯片 + Intel 通用版）
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "版本号：$VERSION"
+          VERSION="$VERSION" UNIVERSAL=1 ./scripts/build-app.sh
+
+      - name: 启动测试（运行 5 秒不崩溃）
+        run: |
+          open dist/SwitchBar.app
+          sleep 5
+          pgrep -x SwitchBar
+          pkill -x SwitchBar
+
+      - name: 打包
+        run: |
+          cd dist
+          ZIP="SwitchBar-${GITHUB_REF_NAME}.zip"
+          ditto -c -k --keepParent SwitchBar.app "$ZIP"
+          shasum -a 256 "$ZIP" | tee "$ZIP.sha256"
+
+      - name: 发布到 Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ZIP="SwitchBar-${GITHUB_REF_NAME}.zip"
+          SHA="$(cut -d ' ' -f 1 "dist/$ZIP.sha256")"
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          ## 安装
+
+          1. 下载下面的 \`$ZIP\`，双击解压，把 **SwitchBar.app** 拖进「应用程序」文件夹。
+          2. 第一次打开前，在「终端」里执行一次（SwitchBar 没有经过苹果公证，系统默认会拦下从网上下载的应用）：
+
+             \`\`\`bash
+             xattr -dr com.apple.quarantine /Applications/SwitchBar.app
+             \`\`\`
+
+             也可以先双击打开一次，被拦下后到「系统设置 › 隐私与安全性」底部点「仍要打开」。
+          3. 打开 SwitchBar，菜单栏右上角会出现开关图标；图标被刘海挡住时按 ⌃⌥⌘S 打开面板。
+
+          从旧版本升级：先退出旧版，再用新版替换。「锁定键盘」用到的「辅助功能」权限需要在系统设置里删掉 SwitchBar 后重新添加。
+
+          ## 校验
+
+          SHA-256：\`$SHA\`
+
+          \`\`\`bash
+          shasum -a 256 ~/Downloads/$ZIP
+          \`\`\`
+
+          这个安装包由仓库里的 [release.yml](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/.github/workflows/release.yml) 在 GitHub 的 macOS 机器上从源码自动构建，构建过程可以在 [Actions 日志](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) 里查看。
+          EOF
+          gh release create "$GITHUB_REF_NAME" "dist/$ZIP" "dist/$ZIP.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "SwitchBar $GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --verify-tag

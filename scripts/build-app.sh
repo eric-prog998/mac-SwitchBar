@@ -4,6 +4,7 @@
 # 可选环境变量：
 #   SIGN_IDENTITY  代码签名身份。默认：钥匙串里有名为 "SwitchBar Local" 的证书就用它，否则临时签名（-）
 #   UNIVERSAL=1    同时编译 Apple 芯片和 Intel 版本（需要完整的 Xcode）
+#   VERSION=1.2.3  写入应用的版本号（发布流程会用标签名自动设置）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,7 +35,8 @@ BIN_DIR="$(swift build -c release $ARCH_FLAGS --show-bin-path)"
 
 echo "==> 生成图标"
 ICNS="$ROOT/.build/AppIcon.icns"
-if [ ! -f "$ICNS" ]; then
+# 图标脚本改过就重新生成
+if [ ! -f "$ICNS" ] || [ "$ROOT/scripts/make-icon.swift" -nt "$ICNS" ]; then
   ICONSET="$ROOT/.build/AppIcon.iconset"
   rm -rf "$ICONSET"
   swift "$ROOT/scripts/make-icon.swift" "$ICONSET"
@@ -47,6 +49,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 cp "$ICNS" "$APP/Contents/Resources/AppIcon.icns"
+if [ -n "${VERSION:-}" ]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" "$APP/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" "$APP/Contents/Info.plist"
+fi
 
 echo "==> 签名（身份：${SIGN_IDENTITY}）"
 codesign --force --sign "$SIGN_IDENTITY" --identifier "$BUNDLE_ID" "$APP"
