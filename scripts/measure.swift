@@ -1,7 +1,7 @@
 // 资源占用测试：读取某个进程的内存占用、CPU 时间和唤醒次数（系统的 proc_pid_rusage 接口，不需要调试权限）。
 // 用法：swift scripts/measure.swift <pid>
 // 输出一行：footprint_mb=… cpu_s=… idle_wakeups=… interrupt_wakeups=…
-import Darwin
+import Foundation
 
 guard CommandLine.arguments.count > 1, let pid = pid_t(CommandLine.arguments[1]) else {
     print("用法：swift scripts/measure.swift <pid>")
