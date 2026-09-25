@@ -44,6 +44,7 @@ enum Snapshot {
         print("states: \(store.states.map { "\($0.key.rawValue)=\($0.value)" }.sorted())")
         print("unavailable: \(store.unavailable.map(\.rawValue).sorted())")
 
+        checkPanelRelease(store)
         renderStatic(store)
 
         if environment["SWITCHBAR_SNAPSHOT_LIVE"] != nil {
@@ -53,6 +54,34 @@ enum Snapshot {
             finish()
         }
         return true
+    }
+
+    // MARK: - 面板反复打开 / 关闭后内存要能回收
+
+    private static func checkPanelRelease(_ store: SwitchStore) {
+        let panel = MenuPanelController { PanelView(store: store, prefs: store.prefs) }
+        func cycle() {
+            panel.show(below: nil)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+            panel.close()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        }
+        cycle() // 第一次打开会加载 SwiftUI 等框架，不算
+        let before = footprintMB()
+        for _ in 0..<10 { cycle() }
+        let after = footprintMB()
+        print(String(format: "panel open/close x10: footprint %.1f MB -> %.1f MB, window released: %@",
+                     before, after, panel.windowNumber == nil ? "yes" : "no"))
+    }
+
+    private static func footprintMB() -> Double {
+        var info = rusage_info_v4()
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
+                proc_pid_rusage(getpid(), RUSAGE_INFO_V4, $0)
+            }
+        }
+        return result == 0 ? Double(info.ri_phys_footprint) / 1_048_576 : -1
     }
 
     // MARK: - 离屏渲染

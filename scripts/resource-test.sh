@@ -7,10 +7,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="${1:-$ROOT/dist/SwitchBar.app}"
 IDLE_SECONDS="${IDLE_SECONDS:-60}"
-# 常驻内存上限（MB，系统「活动监视器」里显示的「内存」就是这个值）
-MAX_FOOTPRINT_MB="${MAX_FOOTPRINT_MB:-500}"
-# 空闲期间允许用掉的 CPU 时间（秒）
-MAX_IDLE_CPU_S="${MAX_IDLE_CPU_S:-10}"
+# 常驻内存上限（MB，系统「活动监视器」里显示的「内存」就是这个值）。
+# 2.0 在 CI 上实测约 8–10 MB（1.3 是 20–27 MB），留一些余量
+MAX_FOOTPRINT_MB="${MAX_FOOTPRINT_MB:-20}"
+# 空闲期间允许用掉的 CPU 时间（秒）。2.0 实测 60 秒不到 0.02 秒（1.3 约 0.8–1 秒）
+MAX_IDLE_CPU_S="${MAX_IDLE_CPU_S:-0.1}"
 
 TMP="$(mktemp -d)"
 MEASURE="$TMP/measure"
