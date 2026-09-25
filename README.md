@@ -15,7 +15,7 @@
 
 | | SwitchBar 的做法 |
 |---|---|
-| 源码 | 全部开源，约 2600 行 Swift，自己审查、自己编译 |
+| 源码 | 全部开源，约 3400 行 Swift，自己审查、自己编译 |
 | 网络 | **代码里没有任何网络请求**。`scripts/audit.sh` 会检查，CI 里如果发现网络代码会直接失败 |
 | 依赖 | 零第三方依赖，只用苹果系统框架（`Package.swift` 里没有 dependencies） |
 | 数据 | 设置只保存在本机 `~/Library/Preferences/local.switchbar.plist` |
@@ -47,7 +47,7 @@
 
 在「设置 › 功能与快捷键」里可以：勾选要显示的开关、拖动调整顺序、为每个开关录制全局快捷键（例如 ⌃⌥D 切换深色模式）。用快捷键操作时屏幕下方会短暂显示提示。
 
-<img src="docs/screenshots/settings-features.png" width="560" alt="设置：功能与快捷键">
+<img src="docs/screenshots/settings-features.png" width="640" alt="设置：功能与快捷键">
 
 清洁屏幕模式（按住按钮 2 秒解锁，防止擦屏幕时误触）：
 
