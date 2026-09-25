@@ -1,0 +1,63 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # 第三方 Action 固定到具体的提交，防止被篡改
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: 安全自查（不允许出现网络代码和第三方依赖）
+        run: ./scripts/audit.sh
+
+      - name: 工具链版本
+        run: swift --version
+
+      - name: 构建（Apple 芯片 + Intel 通用版）
+        run: UNIVERSAL=1 ./scripts/build-app.sh
+
+      - name: 检查产物
+        run: |
+          lipo -info dist/SwitchBar.app/Contents/MacOS/SwitchBar
+          plutil -lint dist/SwitchBar.app/Contents/Info.plist
+          ditto -c -k --keepParent dist/SwitchBar.app dist/SwitchBar.zip
+
+      - name: 启动测试（运行 5 秒不崩溃）
+        run: |
+          open dist/SwitchBar.app
+          sleep 5
+          pgrep -x SwitchBar
+          pkill -x SwitchBar
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: SwitchBar-${{ matrix.os }}
+          path: dist/SwitchBar.zip
+          retention-days: 14
+
+      - name: 界面截图（调试版）
+        if: matrix.os == 'macos-15'
+        timeout-minutes: 5
+        run: |
+          swift build
+          SWITCHBAR_SNAPSHOT_DIR="$PWD/snapshots" .build/debug/SwitchBar
+          ls -la snapshots
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: matrix.os == 'macos-15'
+        with:
+          name: snapshots
+          path: snapshots
+          retention-days: 7
