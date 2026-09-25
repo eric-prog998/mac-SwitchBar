@@ -141,11 +141,6 @@ enum Snapshot {
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            if let window = NSApp.windows.first(where: { $0.windowNumber == panel.windowNumber }) {
-                print("phase \(phase.name): panel visible=\(window.isVisible) alpha=\(window.alphaValue) frame=\(window.frame)")
-            } else {
-                print("phase \(phase.name): panel window missing")
-            }
             var lines = ""
             if let number = panel.windowNumber { lines += "panel \(number)\n" }
             if let number = SettingsWindowController.shared.windowNumber { lines += "settings \(number)\n" }

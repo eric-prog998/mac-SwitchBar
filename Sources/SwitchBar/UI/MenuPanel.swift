@@ -79,15 +79,9 @@ final class MenuPanelController<Content: View> {
     /// 所以直接让 SwiftUI 按内容算；万一还是算不出来，就先排一次版再量，最后兜底用固定大小，保证面板一定看得见。
     private func contentSize(of hosting: NSHostingController<Content>) -> NSSize {
         var size = hosting.sizeThatFits(in: NSSize(width: 10_000, height: 10_000))
-        #if DEBUG
-        print("[panel] sizeThatFits=\(size)")
-        #endif
         if !Self.isUsable(size) {
             hosting.view.layoutSubtreeIfNeeded()
             size = hosting.view.fittingSize
-            #if DEBUG
-            print("[panel] fittingSize after layout=\(size)")
-            #endif
         }
         return Self.isUsable(size) ? size : NSSize(width: 356, height: 560)
     }

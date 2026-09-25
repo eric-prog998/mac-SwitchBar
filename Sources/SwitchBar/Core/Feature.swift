@@ -109,7 +109,7 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
         case .autoHideMenuBar: return on ? "menubar.arrow.up.rectangle" : "menubar.rectangle"
         case .lockScreen: return "lock"
         case .displaySleep: return "display"
-        case .screenSaver: return "tv"
+        case .screenSaver: return "photo.on.rectangle"
         case .sleepNow: return "moon.zzz"
         case .cleanScreen: return "sparkles"
         case .colorPicker: return "eyedropper"
