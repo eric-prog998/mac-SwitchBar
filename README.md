@@ -15,7 +15,7 @@
 
 | | SwitchBar 的做法 |
 |---|---|
-| 源码 | 全部开源，约 3900 行 Swift，自己审查、自己编译 |
+| 源码 | 全部开源，约 3800 行 Swift，自己审查、自己编译 |
 | 网络 | **代码里没有任何网络请求**。`scripts/audit.sh` 会检查，CI 里如果发现网络代码会直接失败 |
 | 依赖 | 零第三方依赖，只用苹果系统框架（`Package.swift` 里没有 dependencies） |
 | 数据 | 设置只保存在本机 `~/Library/Preferences/local.switchbar.plist` |
