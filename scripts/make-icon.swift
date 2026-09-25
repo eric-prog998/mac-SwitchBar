@@ -1,4 +1,4 @@
-// 用代码画出应用图标（橙粉紫渐变圆角方块 + 白色开关），生成 .iconset 目录，
+// 用代码画出应用图标（石墨灰圆角方块 + 白色开关 + 蓝色拨钮），生成 .iconset 目录，
 // 再由 build-app.sh 调用系统自带的 iconutil 转成 .icns。这样仓库里不需要放任何二进制文件。
 import AppKit
 
@@ -29,22 +29,22 @@ func render(_ pixels: Int) -> Data {
     shadow.shadowBlurRadius = s * 0.025
     shadow.shadowOffset = NSSize(width: 0, height: -s * 0.012)
     shadow.set()
-    NSColor(calibratedRed: 0.95, green: 0.35, blue: 0.55, alpha: 1).setFill()
+    NSColor(calibratedRed: 0.15, green: 0.16, blue: 0.19, alpha: 1).setFill()
     bodyPath.fill()
     NSGraphicsContext.restoreGraphicsState()
 
-    // 珊瑚橙 → 粉 → 紫的渐变底色
+    // 石墨灰的渐变底色，和 macOS 自带的工具类应用一致
     let gradient = NSGradient(colors: [
-        NSColor(calibratedRed: 1.00, green: 0.62, blue: 0.36, alpha: 1),
-        NSColor(calibratedRed: 1.00, green: 0.30, blue: 0.52, alpha: 1),
-        NSColor(calibratedRed: 0.53, green: 0.30, blue: 0.98, alpha: 1),
+        NSColor(calibratedRed: 0.36, green: 0.38, blue: 0.43, alpha: 1),
+        NSColor(calibratedRed: 0.19, green: 0.20, blue: 0.24, alpha: 1),
+        NSColor(calibratedRed: 0.10, green: 0.11, blue: 0.13, alpha: 1),
     ])!
-    gradient.draw(in: bodyPath, angle: -60)
+    gradient.draw(in: bodyPath, angle: -90)
 
     // 顶部的玻璃高光
     NSGraphicsContext.saveGraphicsState()
     bodyPath.addClip()
-    let highlight = NSGradient(starting: NSColor.white.withAlphaComponent(0.32),
+    let highlight = NSGradient(starting: NSColor.white.withAlphaComponent(0.14),
                                ending: NSColor.white.withAlphaComponent(0.0))!
     let highlightRect = NSRect(x: body.minX, y: body.midY, width: body.width, height: body.height / 2)
     highlight.draw(in: highlightRect, angle: -90)
@@ -54,7 +54,7 @@ func render(_ pixels: Int) -> Data {
     let rim = NSBezierPath(roundedRect: body.insetBy(dx: s * 0.004, dy: s * 0.004),
                            xRadius: radius - s * 0.004, yRadius: radius - s * 0.004)
     rim.lineWidth = s * 0.006
-    NSColor.white.withAlphaComponent(0.28).setStroke()
+    NSColor.white.withAlphaComponent(0.16).setStroke()
     rim.stroke()
 
     // 开关：半透明白色的「胶囊」+ 右侧的圆形拨钮
@@ -66,15 +66,15 @@ func render(_ pixels: Int) -> Data {
     let inset = pill.height * 0.11
     let knobSize = pill.height - inset * 2
     let knob = NSRect(x: pill.maxX - inset - knobSize, y: pill.minY + inset, width: knobSize, height: knobSize)
-    let knobGradient = NSGradient(starting: NSColor(calibratedRed: 1.00, green: 0.45, blue: 0.55, alpha: 1),
-                                  ending: NSColor(calibratedRed: 0.62, green: 0.32, blue: 0.98, alpha: 1))!
+    let knobGradient = NSGradient(starting: NSColor(calibratedRed: 0.30, green: 0.62, blue: 1.00, alpha: 1),
+                                  ending: NSColor(calibratedRed: 0.04, green: 0.44, blue: 0.98, alpha: 1))!
     knobGradient.draw(in: NSBezierPath(ovalIn: knob), angle: -90)
 
     // 左侧的小圆点，表示「关」的一端
     let dotSize = pill.height * 0.22
     let dot = NSRect(x: pill.minX + pill.height * 0.4 - dotSize / 2, y: pill.midY - dotSize / 2,
                      width: dotSize, height: dotSize)
-    NSColor(calibratedRed: 0.95, green: 0.35, blue: 0.60, alpha: 0.35).setFill()
+    NSColor(calibratedRed: 0.20, green: 0.22, blue: 0.26, alpha: 0.25).setFill()
     NSBezierPath(ovalIn: dot).fill()
 
     NSGraphicsContext.restoreGraphicsState()

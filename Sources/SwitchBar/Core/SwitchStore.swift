@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import SwiftUI
 
 /// 所有开关的状态和操作都集中在这里，面板和全局快捷键共用同一套逻辑
 final class SwitchStore: ObservableObject {
@@ -98,6 +97,31 @@ final class SwitchStore: ObservableObject {
             return prefs.bluetoothName
         }
         return feature.title
+    }
+
+    /// 开关下面的一行状态文字，例如「开启」「还剩 42 分钟」「已连接」
+    func stateText(for feature: FeatureID) -> String {
+        if !isAvailable(feature) {
+            switch feature {
+            case .micMute: return "没有麦克风"
+            case .muteSound: return "没有输出设备"
+            default: return "此 Mac 不支持"
+            }
+        }
+        if isBusy(feature) { return "正在切换…" }
+        let on = isOn(feature)
+        switch feature {
+        case .keepAwake:
+            guard on else { return "关闭" }
+            return keepAwake.remainingMinutes.map { "还剩 \($0) 分钟" } ?? "一直保持"
+        case .micMute, .muteSound:
+            return on ? "已静音" : "未静音"
+        case .bluetoothAudio:
+            if prefs.bluetoothAddress.isEmpty { return "选择耳机" }
+            return on ? "已连接" : "未连接"
+        default:
+            return on ? "开启" : "关闭"
+        }
     }
 
     func tooltip(for feature: FeatureID) -> String {
@@ -251,8 +275,7 @@ final class SwitchStore: ObservableObject {
             deactivateScene(scene)
         }
         if fromHotKey && prefs.showHUD {
-            HUD.shared.show("\(scene.emoji) \(scene.title)：\(turningOn ? "开" : "关")", symbol: "sparkles",
-                            colors: scene.colors)
+            HUD.shared.show("\(scene.title)模式：\(turningOn ? "开" : "关")", symbol: scene.symbol)
         }
     }
 
@@ -281,12 +304,12 @@ final class SwitchStore: ObservableObject {
         if timerRunning {
             focusTimer.stop()
             if fromHotKey && prefs.showHUD {
-                HUD.shared.show("专注计时已停止", symbol: "timer", colors: FeatureColors.timer)
+                HUD.shared.show("专注计时已停止", symbol: "timer")
             }
         } else {
             startTimer()
             if fromHotKey && prefs.showHUD {
-                HUD.shared.show("开始专注 \(prefs.timerMinutes) 分钟", symbol: "timer", colors: FeatureColors.timer)
+                HUD.shared.show("开始专注 \(prefs.timerMinutes) 分钟", symbol: "timer")
             }
         }
     }
@@ -312,7 +335,7 @@ final class SwitchStore: ObservableObject {
         }
         if completed {
             if prefs.timerSound { NSSound(named: NSSound.Name("Glass"))?.play() }
-            HUD.shared.show("时间到！起来活动一下吧", symbol: "figure.walk", duration: 4, colors: FeatureColors.timer)
+            HUD.shared.show("时间到，休息一下", symbol: "cup.and.saucer.fill", duration: 4)
         }
         onTimerTick?()
     }
@@ -333,14 +356,13 @@ final class SwitchStore: ObservableObject {
     private func didToggle(_ feature: FeatureID, to on: Bool, _ fromHotKey: Bool) {
         states[feature] = on
         if fromHotKey && prefs.showHUD {
-            HUD.shared.show("\(title(for: feature))：\(on ? "开" : "关")", symbol: feature.symbol(on: on),
-                            colors: feature.colors)
+            HUD.shared.show("\(title(for: feature))：\(on ? "开" : "关")", symbol: feature.symbol(on: on))
         }
         refreshSoon()
     }
 
     private func report(_ message: String) {
-        HUD.shared.show(message, symbol: "exclamationmark.triangle.fill", duration: 4, colors: FeatureColors.warning)
+        HUD.shared.show(message, symbol: "exclamationmark.triangle.fill", duration: 4)
     }
 
     // MARK: - 保持亮屏
@@ -425,7 +447,7 @@ final class SwitchStore: ObservableObject {
 
     private func eject(_ volumes: [Disks.Volume]) {
         guard !volumes.isEmpty else {
-            HUD.shared.show("没有可推出的磁盘", symbol: "eject", colors: FeatureID.ejectDisks.colors)
+            HUD.shared.show("没有可推出的磁盘", symbol: "eject")
             return
         }
         busy.insert(.ejectDisks)
@@ -434,7 +456,7 @@ final class SwitchStore: ObservableObject {
             self.busy.remove(.ejectDisks)
             if failed.isEmpty {
                 let text = volumes.count == 1 ? "已推出「\(volumes[0].name)」" : "已推出 \(volumes.count) 个磁盘"
-                HUD.shared.show(text, symbol: "eject.fill", colors: FeatureID.ejectDisks.colors)
+                HUD.shared.show(text, symbol: "eject.fill")
             } else {
                 self.report("无法推出：\(failed.joined(separator: "、"))（可能有程序正在使用）")
             }
@@ -574,8 +596,7 @@ final class SwitchStore: ObservableObject {
         for device in devices {
             menu.addItem(ClosureMenuItem(device.name, checked: device.id == current) { [weak self] in
                 if AudioDevices.setDefault(device.id, output: output) {
-                    HUD.shared.show(device.name, symbol: output ? "hifispeaker.2.fill" : "mic.fill",
-                                    colors: FeatureID.audioOutput.colors)
+                    HUD.shared.show(device.name, symbol: output ? "hifispeaker.2.fill" : "mic.fill")
                     self?.refreshSoon(after: 0.3)
                 } else {
                     self?.report("切换到「\(device.name)」失败")

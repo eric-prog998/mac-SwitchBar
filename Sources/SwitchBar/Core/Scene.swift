@@ -16,14 +16,6 @@ enum SceneID: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    var emoji: String {
-        switch self {
-        case .present: return "🎬"
-        case .focus: return "🎧"
-        case .night: return "🌙"
-        }
-    }
-
     var detail: String {
         switch self {
         case .present: return "开会、投屏、录屏前一键收拾好桌面"
