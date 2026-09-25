@@ -25,6 +25,7 @@ final class MenuPanelController<Content: View> {
     #if DEBUG
     /// 调试版检查「关掉后界面有没有释放」用
     var debugHosting: NSViewController? { hosting }
+    var debugWindow: NSWindow? { panel }
     #endif
 
     init(content: @escaping () -> Content) {

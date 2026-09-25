@@ -104,27 +104,39 @@ enum Snapshot {
         if !ok { failures.append(message) }
     }
 
+    /// 真实使用时每次点击都是一个单独的事件，事件处理完系统会清理掉临时对象（autorelease pool）。
+    /// 这里的检查都在一次启动事件里连着跑，所以每一步都包一层 autoreleasepool，模拟「一次点击」。
+    private static func step(_ seconds: TimeInterval = 0.3, _ body: () -> Void) {
+        autoreleasepool {
+            body()
+            spin(seconds)
+        }
+    }
+
     private static func checkReleases(_ store: SwitchStore) {
         // 面板：关掉后界面控制器要被释放
         let panel = MenuPanelController { PanelView(store: store, prefs: store.prefs) }
-        panel.show(below: nil)
-        spin(0.3)
-        weak var hosting = panel.debugHosting
-        check(hosting != nil, "面板打开后有界面")
-        panel.close()
-        spin(0.3)
-        check(hosting == nil && panel.windowNumber == nil, "面板关闭后界面和窗口已释放")
+        weak var hosting: NSViewController?
+        weak var window: NSWindow?
+        step { panel.show(below: nil) }
+        step {
+            hosting = panel.debugHosting
+            window = panel.debugWindow
+        }
+        check(hosting != nil && window != nil, "面板打开后有界面")
+        step { panel.close() }
+        step(0.1) {}
+        print("[check] after close: hosting \(hosting == nil ? "released" : "alive"), window \(window == nil ? "released" : "alive")")
+        check(hosting == nil && window == nil, "面板关闭后界面和窗口已释放")
 
         // 反复打开 / 关闭 20 次：内存不能一直涨，空闲唤醒不能变多
         let baseline = idle(3)
         let before = usage()
         for _ in 0..<20 {
-            panel.show(below: nil)
-            spin(0.2)
-            panel.close()
-            spin(0.2)
+            step(0.2) { panel.show(below: nil) }
+            step(0.2) { panel.close() }
         }
-        spin(0.5)
+        step(0.5) {}
         let after = usage()
         let afterIdle = idle(3)
         print(String(format: "[check] panel x20: footprint %.1f -> %.1f MB; idle 3s wakeups %llu -> %llu, cpu %.3f -> %.3f s",
@@ -135,18 +147,19 @@ enum Snapshot {
         check(afterIdle.cpu < 0.05, "面板开关 20 次后空闲 3 秒 CPU < 0.05 秒")
 
         // 设置窗口：关掉后释放
-        SettingsWindowController.shared.show(tab: .general)
-        spin(0.5)
-        let settingsNumber = SettingsWindowController.shared.windowNumber
-        weak var settingsWindow = NSApp.windows.first { $0.windowNumber == settingsNumber }
+        weak var settingsWindow: NSWindow?
+        step(0.5) { SettingsWindowController.shared.show(tab: .general) }
+        step(0.1) {
+            let number = SettingsWindowController.shared.windowNumber
+            settingsWindow = NSApp.windows.first { $0.windowNumber == number }
+        }
         check(settingsWindow != nil, "设置窗口能打开")
-        settingsWindow?.performClose(nil)
-        spin(0.5)
+        step(0.5) { settingsWindow?.performClose(nil) }
+        step(0.1) {}
         check(SettingsWindowController.shared.windowNumber == nil && settingsWindow == nil, "设置窗口关闭后已释放")
 
         // 提示框：消失后释放
-        HUD.shared.show("测试", symbol: "checkmark", duration: 0.2)
-        spin(1.2)
+        step(1.2) { HUD.shared.show("测试", symbol: "checkmark", duration: 0.2) }
         check(HUD.shared.windowNumber == nil, "提示框消失后已释放")
 
         // 清洁屏幕的黑屏窗口：大小要和屏幕一致（界面放进窗口后不能把窗口缩小）
