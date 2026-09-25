@@ -29,11 +29,8 @@ final class MenuPanelController {
     func show(below button: NSStatusBarButton?) {
         let panel = self.panel ?? makePanel()
         self.panel = panel
-        if panel.contentView == nil {
-            panel.contentView = makeContent()
-        }
-        guard let content = panel.contentView else { return }
-
+        // 先在窗口外算好界面需要的大小，再放进窗口（放进空窗口后再算，得到的可能是窗口当前的 0×0）
+        let content = panel.contentView ?? makeContent()
         let size = content.fittingSize
         let anchor = buttonFrameOnScreen(button)
         let screen = anchor.flatMap { frame in NSScreen.screens.first { $0.frame.intersects(frame) } }
@@ -47,7 +44,10 @@ final class MenuPanelController {
         let top = min(anchor?.minY ?? visible.maxY, visible.maxY) - 6
         let y = max(top - size.height, visible.minY + margin)
 
-        panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
+        panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: false)
+        if panel.contentView !== content {
+            panel.contentView = content
+        }
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
         panel.invalidateShadow()
