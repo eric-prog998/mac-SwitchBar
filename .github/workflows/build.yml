@@ -41,12 +41,9 @@ jobs:
           plutil -lint dist/SwitchBar.app/Contents/Info.plist
           ditto -c -k --keepParent dist/SwitchBar.app dist/SwitchBar.zip
 
-      - name: 启动测试（运行 5 秒不崩溃）
-        run: |
-          open dist/SwitchBar.app
-          sleep 5
-          pgrep -x SwitchBar
-          pkill -x SwitchBar
+      - name: 启动与资源占用测试（常驻内存、空闲 CPU）
+        timeout-minutes: 5
+        run: ./scripts/resource-test.sh dist/SwitchBar.app
 
       - name: 界面渲染测试（调试版）
         timeout-minutes: 5
