@@ -299,7 +299,7 @@ private struct GeneralSettingsView: View {
             } header: {
                 Text("行为")
             } footer: {
-                Text("也可以点面板里「保持亮屏」右上角的小箭头，临时选择时长。")
+                Text("也可以点面板里「保持亮屏」右边的「›」，临时选择时长。")
             }
 
             Section {

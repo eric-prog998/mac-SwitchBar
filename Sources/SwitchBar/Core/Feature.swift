@@ -118,7 +118,7 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// 图标右上角是否有「更多选项」小箭头
+    /// 是否有「更多选项」菜单（面板里开关右边的「›」）
     var hasOptions: Bool {
         switch self {
         case .keepAwake, .doNotDisturb, .bluetoothAudio, .ejectDisks:
