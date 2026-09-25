@@ -20,6 +20,7 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
     case ejectDisks
     case screenSaver
     case displayResolution
+    case audioOutput
 
     enum Kind {
         /// 有开 / 关两种状态
@@ -36,7 +37,7 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .lockScreen, .lockKeyboard, .cleanScreen, .ejectDisks, .screenSaver:
             return .action
-        case .displayResolution:
+        case .displayResolution, .audioOutput:
             return .menu
         default:
             return .toggle
@@ -63,6 +64,7 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
         case .ejectDisks: return "推出磁盘"
         case .screenSaver: return "屏幕保护"
         case .displayResolution: return "分辨率"
+        case .audioOutput: return "声音设备"
         }
     }
 
@@ -87,6 +89,7 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
         case .ejectDisks: return "推出外接硬盘、U 盘和磁盘映像"
         case .screenSaver: return "立即启动屏幕保护程序"
         case .displayResolution: return "切换每台显示器的分辨率"
+        case .audioOutput: return "切换扬声器、耳机、显示器音箱和麦克风"
         }
     }
 
@@ -111,6 +114,7 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
         case .ejectDisks: return "eject"
         case .screenSaver: return "tv"
         case .displayResolution: return "aspectratio"
+        case .audioOutput: return "hifispeaker.2"
         }
     }
 

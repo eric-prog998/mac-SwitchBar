@@ -133,6 +133,7 @@ enum SystemSettings {
         case automation = "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
         case bluetoothPrivacy = "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth"
         case bluetooth = "x-apple.systempreferences:com.apple.BluetoothSettings"
+        case sound = "x-apple.systempreferences:com.apple.Sound-Settings.extension"
         case loginItems = "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"
         case screenRecording = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
         case inputMonitoring = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"

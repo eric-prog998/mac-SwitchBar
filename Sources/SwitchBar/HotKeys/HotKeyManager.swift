@@ -17,17 +17,15 @@ final class HotKeyManager: ObservableObject {
     private static let signature = OSType(0x5357_4252) // "SWBR"
     private var registered: [EventHotKeyRef] = []
     private var targetByID: [UInt32: HotKeyTarget] = [:]
-    private var featureKeys: [FeatureID: HotKey] = [:]
-    private var panelKey: HotKey?
+    private var keys: [HotKeyTarget: HotKey] = [:]
     private var suspended = false
     private var handlerInstalled = false
     private var recordingMonitor: Any?
 
     private init() {}
 
-    func apply(features: [FeatureID: HotKey], panel: HotKey?) {
-        featureKeys = features
-        panelKey = panel
+    func apply(_ keys: [HotKeyTarget: HotKey]) {
+        self.keys = keys
         if !suspended { registerAll() }
     }
 
@@ -101,10 +99,8 @@ final class HotKeyManager: ObservableObject {
         installHandlerIfNeeded()
         unregisterAll()
 
-        var entries: [(HotKeyTarget, HotKey)] = []
-        if let panelKey { entries.append((.panel, panelKey)) }
-        for feature in FeatureID.allCases {
-            if let key = featureKeys[feature] { entries.append((.feature(feature), key)) }
+        let entries: [(HotKeyTarget, HotKey)] = HotKeyTarget.allTargets.compactMap { target in
+            keys[target].map { (target, $0) }
         }
 
         var failures = Set<HotKeyTarget>()

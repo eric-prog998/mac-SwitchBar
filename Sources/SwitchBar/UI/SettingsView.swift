@@ -20,13 +20,27 @@ struct SettingsView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             // 给左上角的红黄绿按钮留出位置
-            Color.clear.frame(height: 46)
+            Color.clear.frame(height: 40)
+            HStack(spacing: 10) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 34, height: 34)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("SwitchBar")
+                        .font(Theme.rounded(15, .bold))
+                    Text("你的菜单栏小开关")
+                        .font(Theme.rounded(11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 8)
             List(SettingsTab.allCases, selection: selection) { tab in
                 Label {
                     Text(tab.title)
-                        .font(.system(size: 13))
+                        .font(Theme.rounded(13, .medium))
                 } icon: {
-                    SettingsIcon(symbol: tab.symbol, color: tab.color, size: 22)
+                    SettingsIcon(symbol: tab.symbol, colors: tab.colors, size: 22)
                 }
                 .padding(.vertical, 3)
             }
@@ -41,13 +55,14 @@ struct SettingsView: View {
     private var detail: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(router.tab.title)
-                .font(.system(size: 20, weight: .bold))
+                .font(Theme.rounded(22, .bold))
                 .padding(.horizontal, 28)
                 .padding(.top, 14)
                 .padding(.bottom, 2)
             Group {
                 switch router.tab {
                 case .features: FeaturesSettingsView(prefs: prefs)
+                case .scenes: ScenesSettingsView(prefs: prefs)
                 case .general: GeneralSettingsView(prefs: prefs)
                 case .focus: FocusSettingsView(prefs: prefs)
                 case .security: SecurityView()
@@ -93,7 +108,7 @@ private struct FeaturesSettingsView: View {
                     SettingsIcon(symbol: "command", color: .purple)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("推荐快捷键")
-                        Text(recommendResult ?? "给常用开关统一设置 ⌃⌥ + 字母，例如 ⌃⌥D 深色模式、⌃⌥M 麦克风；不会覆盖已设置的")
+                        Text(recommendResult ?? "⌃⌥ + 好记的字母，例如 ⌃⌥D 深色模式、⌃⌥1 演示场景、⌃⌥T 专注计时；不会覆盖已设置的")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -136,7 +151,7 @@ private struct FeatureRow: View {
             ))
             .labelsHidden()
             .help("在面板中显示")
-            SettingsIcon(symbol: feature.symbol(on: true), color: feature.tint)
+            SettingsIcon(symbol: feature.symbol(on: true), colors: feature.colors)
             VStack(alignment: .leading, spacing: 2) {
                 Text(feature.title)
                 Text(feature.systemShortcut.map { "\(feature.detail) · \($0)" } ?? feature.detail)
@@ -165,6 +180,113 @@ private struct HotKeyWarning: View {
                 .foregroundColor(.orange)
                 .help("这个快捷键已被系统或其他应用占用，请换一个")
         }
+    }
+}
+
+// MARK: - 场景与计时
+
+private struct ScenesSettingsView: View {
+    @ObservedObject var prefs: Preferences
+    @ObservedObject private var hotKeys = HotKeyManager.shared
+
+    private static let chipColumns = [GridItem(.adaptive(minimum: 118), spacing: 8)]
+    private let toggleFeatures = FeatureID.allCases.filter { $0.kind == .toggle }
+
+    var body: some View {
+        Form {
+            ForEach(SceneID.allCases) { scene in
+                Section {
+                    HStack(spacing: 12) {
+                        Text(scene.emoji)
+                            .font(.system(size: 18))
+                            .frame(width: 34, height: 34)
+                            .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(scene.colors.diagonalGradient))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(scene.title)模式")
+                                .font(Theme.rounded(14, .bold))
+                            Text(scene.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        HotKeyWarning(target: .scene(scene), hotKeys: hotKeys)
+                        HotKeyRecorder(target: .scene(scene), prefs: prefs)
+                    }
+                    LazyVGrid(columns: Self.chipColumns, alignment: .leading, spacing: 8) {
+                        ForEach(toggleFeatures) { feature in
+                            MemberChip(feature: feature,
+                                       selected: prefs.members(of: scene).contains(feature)) {
+                                let included = prefs.members(of: scene).contains(feature)
+                                prefs.setMember(feature, of: scene, included: !included)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            Section {
+                HStack(spacing: 12) {
+                    SettingsIcon(symbol: "timer", colors: FeatureColors.timer)
+                    Text("开始 / 停止专注计时")
+                    Spacer()
+                    HotKeyWarning(target: .timer, hotKeys: hotKeys)
+                    HotKeyRecorder(target: .timer, prefs: prefs)
+                }
+                HStack(spacing: 12) {
+                    SettingsIcon(symbol: "hourglass", colors: FeatureColors.timer)
+                    Picker("默认时长", selection: $prefs.timerMinutes) {
+                        ForEach([15, 20, 25, 30, 45, 60, 90], id: \.self) { minutes in
+                            Text("\(minutes) 分钟").tag(minutes)
+                        }
+                    }
+                }
+                HStack(spacing: 12) {
+                    SettingsIcon(symbol: "headphones", colors: SceneID.focus.colors)
+                    Toggle("计时时自动开启「专注」场景，结束后恢复", isOn: $prefs.timerStartsFocus)
+                }
+                HStack(spacing: 12) {
+                    SettingsIcon(symbol: "bell.fill", colors: FeatureColors.warning)
+                    Toggle("时间到时播放提示音", isOn: $prefs.timerSound)
+                }
+            } header: {
+                Text("🍅 专注计时")
+            } footer: {
+                Text("点面板里的 🍅 开始计时，菜单栏会显示倒计时；在 🍅 上点右键可以选时长或加时间。")
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// 场景设置里可以点选的开关小胶囊
+private struct MemberChip: View {
+    let feature: FeatureID
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: selected ? "checkmark" : feature.symbol(on: false))
+                    .font(.system(size: 11, weight: .bold))
+                    .frame(width: 14)
+                Text(feature.title)
+                    .font(Theme.rounded(12, .semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .foregroundColor(selected ? .white : .primary)
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background(
+                Capsule().fill(selected ? AnyShapeStyle(feature.colors.diagonalGradient)
+                                        : AnyShapeStyle(Color.primary.opacity(0.06)))
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(SquishButtonStyle(scale: 0.95))
     }
 }
 

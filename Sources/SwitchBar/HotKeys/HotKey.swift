@@ -48,10 +48,48 @@ extension FeatureID {
     }
 }
 
-/// 快捷键对应的动作：打开面板，或者切换某个开关
+/// 快捷键对应的动作
 enum HotKeyTarget: Hashable {
+    /// 打开 / 关闭面板
     case panel
+    /// 切换某个开关
     case feature(FeatureID)
+    /// 切换某个场景
+    case scene(SceneID)
+    /// 开始 / 停止专注计时
+    case timer
+
+    /// 除了面板和开关以外的快捷键（单独保存）
+    static var extraTargets: [HotKeyTarget] {
+        [.timer] + SceneID.allCases.map { .scene($0) }
+    }
+
+    /// 全部快捷键目标，顺序固定（注册时用它生成编号）
+    static var allTargets: [HotKeyTarget] {
+        [.panel] + extraTargets + FeatureID.allCases.map { .feature($0) }
+    }
+
+    var storageKey: String {
+        switch self {
+        case .panel: return "panel"
+        case .feature(let feature): return "feature.\(feature.rawValue)"
+        case .scene(let scene): return "scene.\(scene.rawValue)"
+        case .timer: return "timer"
+        }
+    }
+
+    /// 推荐快捷键：场景用 ⌃⌥1/2/3，专注计时用 ⌃⌥T
+    var recommendedHotKey: HotKey? {
+        let controlOption = UInt32(controlKey) | UInt32(optionKey)
+        switch self {
+        case .panel: return HotKey.defaultPanel
+        case .feature(let feature): return feature.recommendedHotKey
+        case .timer: return HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: controlOption)
+        case .scene(let scene):
+            let keys: [SceneID: Int] = [.present: kVK_ANSI_1, .focus: kVK_ANSI_2, .night: kVK_ANSI_3]
+            return keys[scene].map { HotKey(keyCode: UInt32($0), modifiers: controlOption) }
+        }
+    }
 }
 
 enum KeyNames {

@@ -50,12 +50,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 statusBar.togglePanel()
             case .feature(let feature):
                 store.trigger(feature, fromHotKey: true)
+            case .scene(let scene):
+                store.toggleScene(scene, fromHotKey: true)
+            case .timer:
+                store.toggleTimer(fromHotKey: true)
             }
         }
-        hotKeys.apply(features: prefs.hotKeys, panel: prefs.panelHotKey)
-        prefs.$hotKeys.combineLatest(prefs.$panelHotKey)
-            .dropFirst()
-            .sink { features, panel in hotKeys.apply(features: features, panel: panel) }
+        hotKeys.apply(prefs.allHotKeys)
+        prefs.hotKeysChanged
+            .sink { hotKeys.apply(prefs.allHotKeys) }
             .store(in: &cancellables)
     }
 

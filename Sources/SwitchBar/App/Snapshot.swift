@@ -22,6 +22,8 @@ enum Snapshot {
     private static let phases: [Phase] = [
         Phase(name: "light", appearance: .aqua, tab: .features),
         Phase(name: "dark", appearance: .darkAqua, tab: .features),
+        Phase(name: "light-scenes", appearance: .aqua, tab: .scenes),
+        Phase(name: "dark-scenes", appearance: .darkAqua, tab: .scenes),
         Phase(name: "light-general", appearance: .aqua, tab: .general),
         Phase(name: "light-focus", appearance: .aqua, tab: .focus),
         Phase(name: "light-security", appearance: .aqua, tab: .security),
@@ -36,7 +38,9 @@ enum Snapshot {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let store = SwitchStore.shared
-        store.keepAwake.start(minutes: 60) // 让截图里有一个「开启」的开关
+        store.keepAwake.start(minutes: 60) // 让截图里有「开启」的开关、场景和计时
+        store.debugMarkSceneActive(.present)
+        store.debugStartTimer(minutes: 25)
         store.refresh()
         print("states: \(store.states.map { "\($0.key.rawValue)=\($0.value)" }.sorted())")
         print("unavailable: \(store.unavailable.map(\.rawValue).sorted())")
@@ -103,7 +107,7 @@ enum Snapshot {
         panel.show(below: nil)
 
         SettingsWindowController.shared.show(tab: phase.tab)
-        HUD.shared.show("深色模式：开", symbol: "moon.fill", duration: 60)
+        HUD.shared.show("深色模式：开", symbol: "moon.fill", duration: 60, colors: FeatureID.darkMode.colors)
         showKeyboardLock()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {

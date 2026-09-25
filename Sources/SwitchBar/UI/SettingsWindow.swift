@@ -3,6 +3,7 @@ import SwiftUI
 
 enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
     case features
+    case scenes
     case general
     case focus
     case security
@@ -13,6 +14,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
     var title: String {
         switch self {
         case .features: return "功能与快捷键"
+        case .scenes: return "场景与计时"
         case .general: return "通用"
         case .focus: return "勿扰模式"
         case .security: return "安全与权限"
@@ -23,6 +25,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
     var symbol: String {
         switch self {
         case .features: return "square.grid.2x2.fill"
+        case .scenes: return "sparkles"
         case .general: return "gearshape.fill"
         case .focus: return "moon.fill"
         case .security: return "checkmark.shield.fill"
@@ -30,13 +33,14 @@ enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    var color: Color {
+    var colors: [Color] {
         switch self {
-        case .features: return .blue
-        case .general: return .gray
-        case .focus: return .indigo
-        case .security: return .green
-        case .about: return .gray
+        case .features: return FeatureColors.pair(0x5AA9FF, 0x2F6BFF)
+        case .scenes: return FeatureColors.pair(0xFF9A4D, 0xFF3D77)
+        case .general: return FeatureColors.neutral
+        case .focus: return FeatureColors.pair(0x8C7BFF, 0x5B3BEA)
+        case .security: return FeatureColors.pair(0x5BE39A, 0x1FAF62)
+        case .about: return FeatureColors.pair(0x9AA5B8, 0x6B7486)
         }
     }
 }

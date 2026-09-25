@@ -1,4 +1,4 @@
-// 用代码画出应用图标（蓝紫渐变圆角方块 + 白色开关），生成 .iconset 目录，
+// 用代码画出应用图标（橙粉紫渐变圆角方块 + 白色开关），生成 .iconset 目录，
 // 再由 build-app.sh 调用系统自带的 iconutil 转成 .icns。这样仓库里不需要放任何二进制文件。
 import AppKit
 
@@ -29,17 +29,17 @@ func render(_ pixels: Int) -> Data {
     shadow.shadowBlurRadius = s * 0.025
     shadow.shadowOffset = NSSize(width: 0, height: -s * 0.012)
     shadow.set()
-    NSColor(calibratedRed: 0.25, green: 0.42, blue: 0.98, alpha: 1).setFill()
+    NSColor(calibratedRed: 0.95, green: 0.35, blue: 0.55, alpha: 1).setFill()
     bodyPath.fill()
     NSGraphicsContext.restoreGraphicsState()
 
-    // 蓝紫渐变底色
+    // 珊瑚橙 → 粉 → 紫的渐变底色
     let gradient = NSGradient(colors: [
-        NSColor(calibratedRed: 0.36, green: 0.70, blue: 1.00, alpha: 1),
-        NSColor(calibratedRed: 0.27, green: 0.47, blue: 0.99, alpha: 1),
-        NSColor(calibratedRed: 0.45, green: 0.30, blue: 0.92, alpha: 1),
+        NSColor(calibratedRed: 1.00, green: 0.62, blue: 0.36, alpha: 1),
+        NSColor(calibratedRed: 1.00, green: 0.30, blue: 0.52, alpha: 1),
+        NSColor(calibratedRed: 0.53, green: 0.30, blue: 0.98, alpha: 1),
     ])!
-    gradient.draw(in: bodyPath, angle: -90)
+    gradient.draw(in: bodyPath, angle: -60)
 
     // 顶部的玻璃高光
     NSGraphicsContext.saveGraphicsState()
@@ -66,15 +66,15 @@ func render(_ pixels: Int) -> Data {
     let inset = pill.height * 0.11
     let knobSize = pill.height - inset * 2
     let knob = NSRect(x: pill.maxX - inset - knobSize, y: pill.minY + inset, width: knobSize, height: knobSize)
-    let knobGradient = NSGradient(starting: NSColor(calibratedRed: 0.35, green: 0.62, blue: 1.0, alpha: 1),
-                                  ending: NSColor(calibratedRed: 0.30, green: 0.40, blue: 0.96, alpha: 1))!
+    let knobGradient = NSGradient(starting: NSColor(calibratedRed: 1.00, green: 0.45, blue: 0.55, alpha: 1),
+                                  ending: NSColor(calibratedRed: 0.62, green: 0.32, blue: 0.98, alpha: 1))!
     knobGradient.draw(in: NSBezierPath(ovalIn: knob), angle: -90)
 
     // 左侧的小圆点，表示「关」的一端
     let dotSize = pill.height * 0.22
     let dot = NSRect(x: pill.minX + pill.height * 0.4 - dotSize / 2, y: pill.midY - dotSize / 2,
                      width: dotSize, height: dotSize)
-    NSColor(calibratedRed: 0.30, green: 0.45, blue: 0.95, alpha: 0.35).setFill()
+    NSColor(calibratedRed: 0.95, green: 0.35, blue: 0.60, alpha: 0.35).setFill()
     NSBezierPath(ovalIn: dot).fill()
 
     NSGraphicsContext.restoreGraphicsState()
