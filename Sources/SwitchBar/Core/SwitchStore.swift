@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import SwiftUI
 
 /// 所有开关的状态和操作都集中在这里，面板和全局快捷键共用同一套逻辑
 final class SwitchStore: ObservableObject {
@@ -8,10 +9,17 @@ final class SwitchStore: ObservableObject {
     @Published private(set) var states: [FeatureID: Bool] = [:]
     @Published private(set) var unavailable: Set<FeatureID> = []
     @Published private(set) var busy: Set<FeatureID> = []
+    /// 正在生效的场景
+    @Published private(set) var activeScenes: Set<SceneID> = []
+    /// 专注计时是否在进行
+    @Published private(set) var timerRunning = false
+    /// 电池电量（没有电池时为 nil）
+    @Published private(set) var battery: Battery.Status?
 
     let prefs = Preferences.shared
     let keepAwake = KeepAwake()
     let inputLocker = InputLocker()
+    let focusTimer = FocusTimer()
     private let nightShift = NightShift()
     private let trueTone = TrueTone()
     private let bluetooth = BluetoothAudio()
@@ -19,12 +27,22 @@ final class SwitchStore: ObservableObject {
     /// 关闭菜单栏弹出面板（由 StatusBarController 设置）
     var closePanel: (() -> Void)?
 
+    /// 专注计时每秒回调（由 StatusBarController 设置，用来更新菜单栏上的倒计时）
+    var onTimerTick: (() -> Void)?
+
     /// 能否直接读到系统的勿扰状态（读不到时用自己记录的状态）
     private var canReadFocusStatus = false
+
+    /// 每个场景开启时实际打开了哪些开关（关闭场景时只关这些，原本就开着的不动）
+    private var sceneChanges: [SceneID: [FeatureID]] = [:]
+    /// 专注计时是否顺带开启了「专注」场景
+    private var timerActivatedFocus = false
 
     private init() {
         keepAwake.onChange = { [weak self] in self?.refresh() }
         inputLocker.onChange = { [weak self] in self?.refresh() }
+        focusTimer.onTick = { [weak self] in self?.onTimerTick?() }
+        focusTimer.onEnd = { [weak self] completed in self?.timerEnded(completed: completed) }
     }
 
     // MARK: - 状态
@@ -65,6 +83,8 @@ final class SwitchStore: ObservableObject {
 
         if s != states { states = s }
         if u != unavailable { unavailable = u }
+        let status = Battery.current()
+        if status != battery { battery = status }
     }
 
     private func refreshSoon(after delay: TimeInterval = 0.8) {
@@ -91,6 +111,10 @@ final class SwitchStore: ObservableObject {
         }
         if feature == .keepAwake, keepAwake.isActive {
             parts.append(keepAwake.remainingMinutes.map { "还剩 \($0) 分钟" } ?? "一直保持中")
+        }
+        if feature == .audioOutput {
+            if let output = AudioDevices.defaultDeviceName(output: true) { parts.append("输出：\(output)") }
+            if let input = AudioDevices.defaultDeviceName(output: false) { parts.append("输入：\(input)") }
         }
         if feature == .doNotDisturb, !canReadFocusStatus {
             parts.append("通过「快捷指令」切换")
@@ -204,9 +228,93 @@ final class SwitchStore: ObservableObject {
             closePanel?()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { ScreenSaver.start() }
 
-        case .displayResolution:
+        case .displayResolution, .audioOutput:
             showOptionsMenu(for: feature)
         }
+    }
+
+    /// 把某个开关切到指定状态（已经是这个状态就什么都不做）
+    private func setFeature(_ feature: FeatureID, on: Bool) {
+        guard feature.kind == .toggle, isAvailable(feature), isOn(feature) != on else { return }
+        // 没选过耳机时，场景里的「蓝牙耳机」直接跳过，不弹菜单
+        if feature == .bluetoothAudio && prefs.bluetoothAddress.isEmpty { return }
+        trigger(feature)
+    }
+
+    // MARK: - 场景
+
+    func toggleScene(_ scene: SceneID, fromHotKey: Bool = false) {
+        let turningOn = !activeScenes.contains(scene)
+        if turningOn {
+            activateScene(scene)
+        } else {
+            deactivateScene(scene)
+        }
+        if fromHotKey && prefs.showHUD {
+            HUD.shared.show("\(scene.emoji) \(scene.title)：\(turningOn ? "开" : "关")", symbol: "sparkles",
+                            colors: scene.colors)
+        }
+    }
+
+    private func activateScene(_ scene: SceneID) {
+        let toTurnOn = prefs.members(of: scene).filter { isAvailable($0) && !isOn($0) }
+        activeScenes.insert(scene)
+        sceneChanges[scene] = toTurnOn
+        for feature in toTurnOn {
+            setFeature(feature, on: true)
+        }
+    }
+
+    private func deactivateScene(_ scene: SceneID) {
+        activeScenes.remove(scene)
+        let changed = sceneChanges.removeValue(forKey: scene) ?? []
+        // 其他还开着的场景也需要的开关，先不关
+        let stillNeeded = Set(activeScenes.flatMap { prefs.members(of: $0) })
+        for feature in changed where !stillNeeded.contains(feature) {
+            setFeature(feature, on: false)
+        }
+    }
+
+    // MARK: - 专注计时
+
+    func toggleTimer(fromHotKey: Bool = false) {
+        if timerRunning {
+            focusTimer.stop()
+            if fromHotKey && prefs.showHUD {
+                HUD.shared.show("专注计时已停止", symbol: "timer", colors: FeatureColors.timer)
+            }
+        } else {
+            startTimer()
+            if fromHotKey && prefs.showHUD {
+                HUD.shared.show("开始专注 \(prefs.timerMinutes) 分钟", symbol: "timer", colors: FeatureColors.timer)
+            }
+        }
+    }
+
+    func startTimer(minutes: Int? = nil) {
+        focusTimer.start(minutes: minutes ?? prefs.timerMinutes)
+        timerRunning = true
+        if prefs.timerStartsFocus && !activeScenes.contains(.focus) {
+            activateScene(.focus)
+            timerActivatedFocus = true
+        }
+    }
+
+    func extendTimer(minutes: Int) {
+        focusTimer.extend(minutes: minutes)
+    }
+
+    private func timerEnded(completed: Bool) {
+        timerRunning = false
+        if timerActivatedFocus {
+            timerActivatedFocus = false
+            if activeScenes.contains(.focus) { deactivateScene(.focus) }
+        }
+        if completed {
+            if prefs.timerSound { NSSound(named: NSSound.Name("Glass"))?.play() }
+            HUD.shared.show("时间到！起来活动一下吧", symbol: "figure.walk", duration: 4, colors: FeatureColors.timer)
+        }
+        onTimerTick?()
     }
 
     func openSettings(tab: SettingsTab? = nil) {
@@ -216,6 +324,8 @@ final class SwitchStore: ObservableObject {
 
     /// 退出时收尾：释放「保持亮屏」、解除键盘锁定
     func shutdown() {
+        focusTimer.onEnd = nil
+        focusTimer.stop()
         keepAwake.stop(notify: false)
         inputLocker.stop()
     }
@@ -223,13 +333,14 @@ final class SwitchStore: ObservableObject {
     private func didToggle(_ feature: FeatureID, to on: Bool, _ fromHotKey: Bool) {
         states[feature] = on
         if fromHotKey && prefs.showHUD {
-            HUD.shared.show("\(title(for: feature))：\(on ? "开" : "关")", symbol: feature.symbol(on: on))
+            HUD.shared.show("\(title(for: feature))：\(on ? "开" : "关")", symbol: feature.symbol(on: on),
+                            colors: feature.colors)
         }
         refreshSoon()
     }
 
     private func report(_ message: String) {
-        HUD.shared.show(message, symbol: "exclamationmark.triangle", duration: 4)
+        HUD.shared.show(message, symbol: "exclamationmark.triangle.fill", duration: 4, colors: FeatureColors.warning)
     }
 
     // MARK: - 保持亮屏
@@ -314,7 +425,7 @@ final class SwitchStore: ObservableObject {
 
     private func eject(_ volumes: [Disks.Volume]) {
         guard !volumes.isEmpty else {
-            HUD.shared.show("没有可推出的磁盘", symbol: "eject")
+            HUD.shared.show("没有可推出的磁盘", symbol: "eject", colors: FeatureID.ejectDisks.colors)
             return
         }
         busy.insert(.ejectDisks)
@@ -323,7 +434,7 @@ final class SwitchStore: ObservableObject {
             self.busy.remove(.ejectDisks)
             if failed.isEmpty {
                 let text = volumes.count == 1 ? "已推出「\(volumes[0].name)」" : "已推出 \(volumes.count) 个磁盘"
-                HUD.shared.show(text, symbol: "eject.fill")
+                HUD.shared.show(text, symbol: "eject.fill", colors: FeatureID.ejectDisks.colors)
             } else {
                 self.report("无法推出：\(failed.joined(separator: "、"))（可能有程序正在使用）")
             }
@@ -440,10 +551,37 @@ final class SwitchStore: ObservableObject {
                 }
             }
 
+        case .audioOutput:
+            addAudioDevices(output: true, to: menu)
+            menu.addItem(.separator())
+            addAudioDevices(output: false, to: menu)
+            menu.addItem(.separator())
+            menu.addItem(ClosureMenuItem("声音设置…") { SystemSettings.open(.sound) })
+
         default:
             return nil
         }
         return menu
+    }
+
+    private func addAudioDevices(output: Bool, to menu: NSMenu) {
+        menu.addItem(ClosureMenuItem.header(output ? "输出" : "输入"))
+        let devices = AudioDevices.all(output: output)
+        let current = AudioDevices.defaultDevice(output: output)
+        if devices.isEmpty {
+            menu.addItem(ClosureMenuItem(output ? "没有输出设备" : "没有输入设备", handler: nil))
+        }
+        for device in devices {
+            menu.addItem(ClosureMenuItem(device.name, checked: device.id == current) { [weak self] in
+                if AudioDevices.setDefault(device.id, output: output) {
+                    HUD.shared.show(device.name, symbol: output ? "hifispeaker.2.fill" : "mic.fill",
+                                    colors: FeatureID.audioOutput.colors)
+                    self?.refreshSoon(after: 0.3)
+                } else {
+                    self?.report("切换到「\(device.name)」失败")
+                }
+            })
+        }
     }
 
     private func addModes(_ modes: [Displays.ModeOption], of display: Displays.Display, to menu: NSMenu) {
@@ -457,3 +595,18 @@ final class SwitchStore: ObservableObject {
         }
     }
 }
+
+#if DEBUG
+extension SwitchStore {
+    /// 仅调试版截图用：直接标记场景为开启，不去真的切换系统设置
+    func debugMarkSceneActive(_ scene: SceneID) {
+        activeScenes.insert(scene)
+    }
+
+    /// 仅调试版截图用：开始计时但不联动场景
+    func debugStartTimer(minutes: Int) {
+        focusTimer.start(minutes: minutes)
+        timerRunning = true
+    }
+}
+#endif

@@ -9,16 +9,13 @@ final class StatusBarController: NSObject {
 
     init(store: SwitchStore) {
         self.store = store
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         // 记住位置：按住 ⌘ 拖动过图标后，下次启动仍在原处（有刘海的屏幕上可以把它挪到不被挡住的地方）
         statusItem.autosaveName = "SwitchBarStatusItem"
         panel = MenuPanelController(rootView: PanelView(store: store, prefs: store.prefs))
         super.init()
 
         if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "switch.2", accessibilityDescription: "SwitchBar")
-            image?.isTemplate = true
-            button.image = image
             button.target = self
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -27,6 +24,30 @@ final class StatusBarController: NSObject {
 
         store.closePanel = { [weak self] in
             self?.panel.close()
+        }
+        store.onTimerTick = { [weak self] in
+            self?.updateStatusItem()
+        }
+        updateStatusItem()
+    }
+
+    /// 平时只显示开关图标；专注计时时显示倒计时
+    private func updateStatusItem() {
+        guard let button = statusItem.button else { return }
+        let timer = store.focusTimer
+        if timer.isRunning {
+            let image = NSImage(systemSymbolName: "timer", accessibilityDescription: "专注计时")
+            image?.isTemplate = true
+            button.image = image
+            button.imagePosition = .imageLeading
+            button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+            button.title = " " + FocusTimer.format(timer.remaining)
+        } else {
+            let image = NSImage(systemSymbolName: "switch.2", accessibilityDescription: "SwitchBar")
+            image?.isTemplate = true
+            button.image = image
+            button.imagePosition = .imageOnly
+            button.title = ""
         }
     }
 

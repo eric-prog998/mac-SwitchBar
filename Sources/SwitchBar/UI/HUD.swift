@@ -11,11 +11,12 @@ final class HUD {
     /// 窗口编号（调试版截图用）
     var windowNumber: Int? { panel?.windowNumber }
 
-    func show(_ text: String, symbol: String, duration: TimeInterval = 1.4) {
+    func show(_ text: String, symbol: String, duration: TimeInterval = 1.4,
+              colors: [Color] = FeatureColors.pair(0x6F8BFF, 0x3B6BFF)) {
         let panel = self.panel ?? makePanel()
         self.panel = panel
 
-        let host = NSHostingView(rootView: HUDView(text: text, symbol: symbol))
+        let host = NSHostingView(rootView: HUDView(text: text, symbol: symbol, colors: colors))
         let size = host.fittingSize
         panel.contentView = host
 
@@ -65,21 +66,25 @@ final class HUD {
 struct HUDView: View {
     let text: String
     let symbol: String
+    var colors: [Color] = FeatureColors.pair(0x6F8BFF, 0x3B6BFF)
 
     var body: some View {
-        VStack(spacing: 10) {
+        HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 32, weight: .medium))
-                .frame(height: 38)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundColor(.white)
+                .frame(width: 38, height: 38)
+                .background(Circle().fill(colors.diagonalGradient))
+                .shadow(color: colors[1].opacity(0.45), radius: 6, y: 2)
             Text(text)
-                .font(.system(size: 13, weight: .medium))
-                .multilineTextAlignment(.center)
+                .font(Theme.rounded(14, .semibold))
+                .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 18)
-        .frame(width: text.count > 12 ? 300 : nil)
-        .frame(minWidth: 160)
-        .panelBackground(cornerRadius: 26)
+        .padding(.leading, 12)
+        .padding(.trailing, 20)
+        .padding(.vertical, 12)
+        .frame(width: text.count > 16 ? 330 : nil, alignment: .leading)
+        .panelBackground(cornerRadius: 31)
     }
 }
