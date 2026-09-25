@@ -107,7 +107,7 @@ enum Snapshot {
         panel.show(below: nil)
 
         SettingsWindowController.shared.show(tab: phase.tab)
-        HUD.shared.show("深色模式：开", symbol: "moon.fill", duration: 60, colors: FeatureID.darkMode.colors)
+        HUD.shared.show("深色模式：开", symbol: "moon.fill", duration: 60)
         showKeyboardLock()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {

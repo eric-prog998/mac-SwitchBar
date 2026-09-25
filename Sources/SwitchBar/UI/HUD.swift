@@ -11,12 +11,11 @@ final class HUD {
     /// 窗口编号（调试版截图用）
     var windowNumber: Int? { panel?.windowNumber }
 
-    func show(_ text: String, symbol: String, duration: TimeInterval = 1.4,
-              colors: [Color] = FeatureColors.pair(0x6F8BFF, 0x3B6BFF)) {
+    func show(_ text: String, symbol: String, duration: TimeInterval = 1.4) {
         let panel = self.panel ?? makePanel()
         self.panel = panel
 
-        let host = NSHostingView(rootView: HUDView(text: text, symbol: symbol, colors: colors))
+        let host = NSHostingView(rootView: HUDView(text: text, symbol: symbol))
         let size = host.fittingSize
         panel.contentView = host
 
@@ -66,25 +65,21 @@ final class HUD {
 struct HUDView: View {
     let text: String
     let symbol: String
-    var colors: [Color] = FeatureColors.pair(0x6F8BFF, 0x3B6BFF)
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: symbol)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundColor(.white)
-                .frame(width: 38, height: 38)
-                .background(Circle().fill(colors.diagonalGradient))
-                .shadow(color: colors[1].opacity(0.45), radius: 6, y: 2)
+                .font(.system(size: 16, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 22)
             Text(text)
-                .font(Theme.rounded(14, .semibold))
+                .font(.system(size: 13, weight: .medium))
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 20)
+        .padding(.horizontal, 18)
         .padding(.vertical, 12)
-        .frame(width: text.count > 16 ? 330 : nil, alignment: .leading)
-        .panelBackground(cornerRadius: 31)
+        .frame(width: text.count > 18 ? 320 : nil, alignment: .leading)
+        .panelBackground(cornerRadius: 22)
     }
 }
