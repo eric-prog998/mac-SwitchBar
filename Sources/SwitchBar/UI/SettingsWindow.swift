@@ -5,6 +5,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
     case features
     case general
     case focus
+    case security
     case about
 
     var id: Self { self }
@@ -14,7 +15,8 @@ enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
         case .features: return "功能与快捷键"
         case .general: return "通用"
         case .focus: return "勿扰模式"
-        case .about: return "关于与隐私"
+        case .security: return "安全与权限"
+        case .about: return "关于"
         }
     }
 
@@ -23,7 +25,8 @@ enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
         case .features: return "square.grid.2x2.fill"
         case .general: return "gearshape.fill"
         case .focus: return "moon.fill"
-        case .about: return "lock.shield.fill"
+        case .security: return "checkmark.shield.fill"
+        case .about: return "info.circle.fill"
         }
     }
 
@@ -32,7 +35,8 @@ enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
         case .features: return .blue
         case .general: return .gray
         case .focus: return .indigo
-        case .about: return .green
+        case .security: return .green
+        case .about: return .gray
         }
     }
 }

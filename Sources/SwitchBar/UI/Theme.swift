@@ -158,9 +158,11 @@ extension FeatureID {
         case .nightShift: return .orange
         case .trueTone: return .yellow
         case .micMute: return .red
+        case .muteSound: return .pink
         case .bluetoothAudio: return .blue
         case .hiddenFiles: return .gray
         case .autoHideDock: return .teal
+        case .autoHideMenuBar: return .teal
         case .lockScreen: return .gray
         case .lockKeyboard: return .gray
         case .cleanScreen: return .cyan

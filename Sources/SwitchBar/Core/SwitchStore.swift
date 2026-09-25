@@ -47,18 +47,21 @@ final class SwitchStore: ObservableObject {
         s[.doNotDisturb] = focus ?? prefs.dndActive
         s[.nightShift] = nightShift.isEnabled
         s[.trueTone] = trueTone.isEnabled
-        s[.micMute] = Microphone.isMuted
+        s[.micMute] = AudioMute.input.isMuted
+        s[.muteSound] = AudioMute.output.isMuted
         // 没选过耳机就不碰蓝牙，避免一启动就弹出蓝牙权限请求
         s[.bluetoothAudio] = prefs.bluetoothAddress.isEmpty ? false : bluetooth.isConnected(address: prefs.bluetoothAddress)
         s[.hiddenFiles] = Finder.showsHiddenFiles
         s[.autoHideDock] = Dock.isAutoHidden
+        s[.autoHideMenuBar] = MenuBar.isAutoHidden
         s[.lockKeyboard] = inputLocker.mode == .keyboard
         s[.cleanScreen] = inputLocker.mode == .cleaning
 
         var u: Set<FeatureID> = []
         if !nightShift.isSupported { u.insert(.nightShift) }
         if !trueTone.isSupported { u.insert(.trueTone) }
-        if Microphone.defaultInputDevice() == nil { u.insert(.micMute) }
+        if !AudioMute.input.isAvailable { u.insert(.micMute) }
+        if !AudioMute.output.isAvailable { u.insert(.muteSound) }
 
         if s != states { states = s }
         if u != unavailable { unavailable = u }
@@ -80,7 +83,11 @@ final class SwitchStore: ObservableObject {
     func tooltip(for feature: FeatureID) -> String {
         var parts = [feature.title]
         if !isAvailable(feature) {
-            parts.append(feature == .micMute ? "没有检测到麦克风" : "这台 Mac 不支持")
+            switch feature {
+            case .micMute: parts.append("没有检测到麦克风")
+            case .muteSound: parts.append("没有检测到扬声器或耳机")
+            default: parts.append("这台 Mac 不支持")
+            }
         }
         if feature == .keepAwake, keepAwake.isActive {
             parts.append(keepAwake.remainingMinutes.map { "还剩 \($0) 分钟" } ?? "一直保持中")
@@ -141,11 +148,19 @@ final class SwitchStore: ObservableObject {
             }
 
         case .micMute:
-            let target = !Microphone.isMuted
-            if Microphone.setMuted(target) {
+            let target = !AudioMute.input.isMuted
+            if AudioMute.input.setMuted(target) {
                 didToggle(feature, to: target, fromHotKey)
             } else {
                 report("当前输入设备不支持静音或调节音量")
+            }
+
+        case .muteSound:
+            let target = !AudioMute.output.isMuted
+            if AudioMute.output.setMuted(target) {
+                didToggle(feature, to: target, fromHotKey)
+            } else {
+                report("当前输出设备不支持静音或调节音量")
             }
 
         case .bluetoothAudio:
@@ -159,6 +174,14 @@ final class SwitchStore: ObservableObject {
         case .autoHideDock:
             let target = !Dock.isAutoHidden
             if let error = Dock.setAutoHide(target) {
+                report(error)
+            } else {
+                didToggle(feature, to: target, fromHotKey)
+            }
+
+        case .autoHideMenuBar:
+            let target = !MenuBar.isAutoHidden
+            if let error = MenuBar.setAutoHide(target) {
                 report(error)
             } else {
                 didToggle(feature, to: target, fromHotKey)

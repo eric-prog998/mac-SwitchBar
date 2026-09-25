@@ -17,6 +17,7 @@ final class Preferences: ObservableObject {
         static let bluetoothAddress = "bluetoothAddress"
         static let bluetoothName = "bluetoothName"
         static let micVolumes = "savedMicVolumes"
+        static let outputVolumes = "savedOutputVolumes"
     }
 
     private let defaults = UserDefaults.standard
@@ -85,6 +86,12 @@ final class Preferences: ObservableObject {
         set { defaults.set(newValue, forKey: Key.micVolumes) }
     }
 
+    /// 系统声音不支持「静音」属性时，静音前记下的音量
+    var savedOutputVolumes: [Float] {
+        get { (defaults.array(forKey: Key.outputVolumes) as? [NSNumber])?.map(\.floatValue) ?? [] }
+        set { defaults.set(newValue, forKey: Key.outputVolumes) }
+    }
+
     var visibleFeatures: [FeatureID] {
         featureOrder.filter { !hiddenFeatures.contains($0) }
     }
@@ -146,6 +153,23 @@ final class Preferences: ObservableObject {
             keys[feature] = key
         }
         if keys != hotKeys { hotKeys = keys }
+    }
+
+    /// 一键设置推荐快捷键：只给「还没有快捷键」的开关设置，不会覆盖你自己录制的。
+    /// 返回新设置的数量
+    @discardableResult
+    func applyRecommendedHotKeys() -> Int {
+        var keys = hotKeys
+        let used = Set(keys.values.map { "\($0.keyCode)-\($0.modifiers)" })
+            .union(panelHotKey.map { ["\($0.keyCode)-\($0.modifiers)"] } ?? [])
+        var count = 0
+        for feature in FeatureID.allCases where keys[feature] == nil {
+            guard let key = feature.recommendedHotKey, !used.contains("\(key.keyCode)-\(key.modifiers)") else { continue }
+            keys[feature] = key
+            count += 1
+        }
+        hotKeys = keys
+        return count
     }
 
     private struct StoredHotKey: Codable {

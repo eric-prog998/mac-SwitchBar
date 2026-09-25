@@ -9,9 +9,11 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
     case nightShift
     case trueTone
     case micMute
+    case muteSound
     case bluetoothAudio
     case hiddenFiles
     case autoHideDock
+    case autoHideMenuBar
     case lockScreen
     case lockKeyboard
     case cleanScreen
@@ -50,9 +52,11 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
         case .nightShift: return "夜览"
         case .trueTone: return "原彩显示"
         case .micMute: return "麦克风静音"
+        case .muteSound: return "静音"
         case .bluetoothAudio: return "蓝牙耳机"
         case .hiddenFiles: return "显示隐藏文件"
         case .autoHideDock: return "隐藏程序坞"
+        case .autoHideMenuBar: return "隐藏菜单栏"
         case .lockScreen: return "锁定屏幕"
         case .lockKeyboard: return "锁定键盘"
         case .cleanScreen: return "清洁屏幕"
@@ -72,9 +76,11 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
         case .nightShift: return "让屏幕颜色偏暖，晚上更护眼"
         case .trueTone: return "根据环境光自动调整屏幕色温"
         case .micMute: return "静音当前的麦克风"
+        case .muteSound: return "静音当前的扬声器或耳机"
         case .bluetoothAudio: return "一键连接或断开 AirPods 等耳机"
         case .hiddenFiles: return "在访达里显示以 . 开头的隐藏文件"
         case .autoHideDock: return "自动隐藏程序坞，腾出屏幕空间"
+        case .autoHideMenuBar: return "自动隐藏菜单栏，刘海屏上看视频、演示更干净"
         case .lockScreen: return "立即锁定屏幕"
         case .lockKeyboard: return "擦键盘或防猫踩时暂时锁住按键"
         case .cleanScreen: return "黑屏并锁住键盘，放心擦屏幕"
@@ -94,9 +100,11 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
         case .nightShift: return on ? "sunset.fill" : "sunset"
         case .trueTone: return on ? "sun.max.fill" : "sun.max"
         case .micMute: return on ? "mic.slash.fill" : "mic"
+        case .muteSound: return on ? "speaker.slash.fill" : "speaker.wave.2"
         case .bluetoothAudio: return "headphones"
         case .hiddenFiles: return on ? "eye" : "eye.slash"
         case .autoHideDock: return on ? "dock.arrow.down.rectangle" : "dock.rectangle"
+        case .autoHideMenuBar: return on ? "menubar.arrow.up.rectangle" : "menubar.rectangle"
         case .lockScreen: return "lock"
         case .lockKeyboard: return "keyboard"
         case .cleanScreen: return "sparkles"
@@ -117,4 +125,16 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
     }
 
     var supportsHotKey: Bool { kind != .menu }
+
+    /// macOS 自带的快捷键（这些功能不一定需要再设置 SwitchBar 的快捷键）
+    var systemShortcut: String? {
+        switch self {
+        case .lockScreen: return "系统自带 ⌃⌘Q"
+        case .autoHideDock: return "系统自带 ⌥⌘D"
+        case .hiddenFiles: return "访达里自带 ⇧⌘."
+        case .doNotDisturb: return "MacBook 键盘上的 🌙 键（F6）"
+        case .muteSound: return "键盘上的静音键（F10）"
+        default: return nil
+        }
+    }
 }

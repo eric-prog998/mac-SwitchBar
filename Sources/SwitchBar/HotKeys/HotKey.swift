@@ -25,6 +25,29 @@ struct HotKey: Codable, Equatable {
     }
 }
 
+extension FeatureID {
+    /// 推荐的快捷键：统一用 ⌃⌥ 加一个好记的字母（系统已经自带快捷键的功能不推荐）
+    var recommendedHotKey: HotKey? {
+        let key: Int
+        switch self {
+        case .hideDesktop: key = kVK_ANSI_H      // Hide
+        case .darkMode: key = kVK_ANSI_D         // Dark
+        case .keepAwake: key = kVK_ANSI_C        // Caffeine
+        case .doNotDisturb: key = kVK_ANSI_N     // Notifications
+        case .nightShift: key = kVK_ANSI_Y       // 夜 yè
+        case .micMute: key = kVK_ANSI_M          // Mic
+        case .muteSound: key = kVK_ANSI_S        // Sound
+        case .bluetoothAudio: key = kVK_ANSI_A   // AirPods
+        case .autoHideMenuBar: key = kVK_ANSI_B  // menu Bar
+        case .lockKeyboard: key = kVK_ANSI_K     // Keyboard
+        case .cleanScreen: key = kVK_ANSI_Q      // 清 qīng
+        case .ejectDisks: key = kVK_ANSI_E       // Eject
+        default: return nil
+        }
+        return HotKey(keyCode: UInt32(key), modifiers: UInt32(controlKey) | UInt32(optionKey))
+    }
+}
+
 /// 快捷键对应的动作：打开面板，或者切换某个开关
 enum HotKeyTarget: Hashable {
     case panel
