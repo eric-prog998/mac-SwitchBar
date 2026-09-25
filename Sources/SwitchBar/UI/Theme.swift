@@ -18,7 +18,9 @@ extension View {
     func bubbleBackground(on: Bool, hovering: Bool) -> some View {
         if #available(macOS 26.0, *) {
             if on {
-                self.glassEffect(.regular.tint(.accentColor).interactive(), in: Circle())
+                // 和控制中心一样：开启时是实心的强调色圆，一眼就能看出来
+                self.background(Circle().fill(Color.accentColor.gradient))
+                    .glassEffect(.regular.interactive(), in: Circle())
             } else {
                 self.glassEffect(.regular.interactive(), in: Circle())
             }
@@ -78,9 +80,9 @@ extension View {
 #endif
 
 extension Theme {
-    static func legacyBubble(on: Bool, hovering: Bool) -> Color {
-        if on { return .accentColor }
-        return Color.primary.opacity(hovering ? 0.14 : 0.08)
+    static func legacyBubble(on: Bool, hovering: Bool) -> AnyShapeStyle {
+        if on { return AnyShapeStyle(Color.accentColor.gradient) }
+        return AnyShapeStyle(Color.primary.opacity(hovering ? 0.14 : 0.08))
     }
 }
 
