@@ -15,7 +15,7 @@
 
 | | SwitchBar 的做法 |
 |---|---|
-| 源码 | 全部开源，约 4700 行 Swift，自己审查、自己编译 |
+| 源码 | 源码公开（source-available），约 4700 行 Swift，可自行审查、自己编译；不是 OSI 意义上的开源软件 |
 | 网络 | **代码里没有任何网络请求**。`scripts/audit.sh` 会检查，CI 里如果发现网络代码会直接失败 |
 | 依赖 | 零第三方依赖，只用苹果系统框架（`Package.swift` 里没有 dependencies） |
 | 数据 | 设置只保存在本机 `~/Library/Preferences/local.switchbar.plist` |
@@ -110,7 +110,7 @@ MacBook 上，面板右上角会显示电池电量和充电状态。
 
 ### 方法一：从 Releases 下载（推荐，最简单）
 
-1. 打开 [Releases 页面](https://github.com/eric-prog998/mac-SwitchBar/releases/latest)，下载 `SwitchBar-vX.Y.Z.zip`（仓库是私有的，需要先登录 GitHub）。
+1. 打开 [Releases 页面](https://github.com/eric-prog998/mac-SwitchBar/releases/latest)，下载 `SwitchBar-vX.Y.Z.zip`。
 2. 双击解压，把 **SwitchBar.app** 拖进「应用程序」文件夹。
 3. SwitchBar 没有经过苹果公证（需要付费开发者账号），系统默认会拦下从网上下载的应用。打开「终端」执行一次：
 
@@ -146,7 +146,7 @@ shasum -a 256 ~/Downloads/SwitchBar-v1.3.0.zip
    make install
    ```
 
-   仓库是私有的，`git clone` 时会要求登录 GitHub；也可以用 GitHub Desktop 克隆，然后在终端里 `cd` 到克隆下来的文件夹执行 `make install`。
+   仓库是公开的，可以直接克隆；也可以用 GitHub Desktop 克隆，然后在终端里 `cd` 到克隆下来的文件夹执行 `make install`。
 
    脚本会编译出 `dist/SwitchBar.app`，复制到「应用程序」文件夹并启动。用 Xcode 26 或更新版本编译才会包含液态玻璃效果。
 
@@ -262,6 +262,16 @@ Sources/SwitchBar/
 ├── HotKeys/    全局快捷键
 └── UI/         菜单栏面板、设置窗口、提示框、锁定界面
 ```
+
+## 许可与版权
+
+Copyright © 2026 **Eric D**. All rights reserved.
+
+本项目是**源码公开（source-available）**软件，不是 OSI 意义上的开源软件。你可以下载、安装、运行，并为**个人、非商业用途**在本地修改；未经 Eric D 书面许可，不得重新发布、镜像、共享源码或安装包，不得分发修改版，不得改名/换品牌后发布或出售，也不得用于商业用途。
+
+完整条款见 [LICENSE](LICENSE)。
+
+SwitchBar 是独立项目，与 One Switch / Fireball Studio 无隶属、授权或背书关系；项目中提及 One Switch 仅用于说明功能参考。
 
 ## 卸载
 
