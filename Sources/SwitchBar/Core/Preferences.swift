@@ -8,6 +8,7 @@ final class Preferences: ObservableObject {
         static let order = "featureOrder"
         static let hidden = "hiddenFeatures"
         static let hotKeys = "hotKeys"
+        static let panelHotKey = "panelHotKey"
         static let keepAwakeMinutes = "keepAwakeMinutes"
         static let showHUD = "showHUD"
         static let dndOn = "dndOnShortcut"
@@ -32,6 +33,16 @@ final class Preferences: ObservableObject {
 
     @Published var hotKeys: [FeatureID: HotKey] {
         didSet { saveHotKeys() }
+    }
+
+    /// 打开 / 关闭面板的快捷键（默认 ⌃⌥⌘S，可以清除）
+    @Published var panelHotKey: HotKey? {
+        didSet {
+            // 包一层再保存，这样「清除了」和「从没设置过」可以区分开
+            if let data = try? JSONEncoder().encode(StoredHotKey(key: panelHotKey)) {
+                defaults.set(data, forKey: Key.panelHotKey)
+            }
+        }
     }
 
     /// 点「保持亮屏」时默认保持多久，0 表示一直保持
@@ -85,6 +96,11 @@ final class Preferences: ObservableObject {
         featureOrder = storedOrder + FeatureID.allCases.filter { !storedOrder.contains($0) }
         hiddenFeatures = Set((d.stringArray(forKey: Key.hidden) ?? []).compactMap(FeatureID.init(rawValue:)))
         hotKeys = Preferences.loadHotKeys(from: d)
+        if let data = d.data(forKey: Key.panelHotKey), let stored = try? JSONDecoder().decode(StoredHotKey.self, from: data) {
+            panelHotKey = stored.key
+        } else {
+            panelHotKey = HotKey.defaultPanel
+        }
         keepAwakeMinutes = d.object(forKey: Key.keepAwakeMinutes) as? Int ?? 0
         showHUD = d.object(forKey: Key.showHUD) as? Bool ?? true
         dndOnShortcut = d.string(forKey: Key.dndOn) ?? "开启勿扰"
@@ -105,16 +121,35 @@ final class Preferences: ObservableObject {
         }
     }
 
-    /// 设置快捷键；同一组合键如果已被别的功能使用，会从那个功能上移除
-    func setHotKey(_ key: HotKey?, for feature: FeatureID) {
+    func hotKey(for target: HotKeyTarget) -> HotKey? {
+        switch target {
+        case .panel: return panelHotKey
+        case .feature(let feature): return hotKeys[feature]
+        }
+    }
+
+    /// 设置快捷键；同一组合键如果已被别处使用，会从那里移除
+    func setHotKey(_ key: HotKey?, for target: HotKeyTarget) {
         var keys = hotKeys
         if let key {
-            for (other, existing) in keys where other != feature && existing == key {
+            for (other, existing) in keys where existing == key && target != .feature(other) {
                 keys[other] = nil
             }
+            if target != .panel && panelHotKey == key {
+                panelHotKey = nil
+            }
         }
-        keys[feature] = key
-        hotKeys = keys
+        switch target {
+        case .panel:
+            panelHotKey = key
+        case .feature(let feature):
+            keys[feature] = key
+        }
+        if keys != hotKeys { hotKeys = keys }
+    }
+
+    private struct StoredHotKey: Codable {
+        var key: HotKey?
     }
 
     private func saveHotKeys() {

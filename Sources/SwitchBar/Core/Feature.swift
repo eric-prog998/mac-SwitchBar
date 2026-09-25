@@ -62,6 +62,28 @@ enum FeatureID: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    /// 设置里显示的一句话说明
+    var detail: String {
+        switch self {
+        case .hideDesktop: return "一键隐藏桌面上的所有文件和图标"
+        case .darkMode: return "在深色和浅色外观之间切换"
+        case .keepAwake: return "阻止屏幕自动变暗和休眠"
+        case .doNotDisturb: return "通过「快捷指令」开关勿扰模式"
+        case .nightShift: return "让屏幕颜色偏暖，晚上更护眼"
+        case .trueTone: return "根据环境光自动调整屏幕色温"
+        case .micMute: return "静音当前的麦克风"
+        case .bluetoothAudio: return "一键连接或断开 AirPods 等耳机"
+        case .hiddenFiles: return "在访达里显示以 . 开头的隐藏文件"
+        case .autoHideDock: return "自动隐藏程序坞，腾出屏幕空间"
+        case .lockScreen: return "立即锁定屏幕"
+        case .lockKeyboard: return "擦键盘或防猫踩时暂时锁住按键"
+        case .cleanScreen: return "黑屏并锁住键盘，放心擦屏幕"
+        case .ejectDisks: return "推出外接硬盘、U 盘和磁盘映像"
+        case .screenSaver: return "立即启动屏幕保护程序"
+        case .displayResolution: return "切换每台显示器的分辨率"
+        }
+    }
+
     /// SF Symbols 图标名
     func symbol(on: Bool) -> String {
         switch self {

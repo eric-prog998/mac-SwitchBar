@@ -22,6 +22,26 @@ final class InputLocker {
 
     var onChange: (() -> Void)?
 
+    init() {
+        // 安全保护：电脑睡眠、合上屏幕、锁屏时自动解锁，避免回来后键盘无法输入密码
+        let workspace = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification,
+                     NSWorkspace.sessionDidResignActiveNotification] {
+            workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.stopIfLocked()
+            }
+        }
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.stopIfLocked()
+        }
+    }
+
+    private func stopIfLocked() {
+        if mode != nil { stop() }
+    }
+
     static var hasPermission: Bool { AXIsProcessTrusted() }
 
     /// 弹出系统的「辅助功能」授权提示
@@ -134,17 +154,18 @@ final class InputLocker {
     // MARK: - 覆盖窗口
 
     private func showOverlay(for mode: Mode) {
-        NSApp.activate(ignoringOtherApps: true)
+        AppActivation.activate()
         let mouseScreen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
             ?? NSScreen.main
             ?? NSScreen.screens.first
 
         switch mode {
         case .keyboard:
-            let size = NSSize(width: 300, height: 200)
+            let hosting = NSHostingView(rootView: KeyboardLockView { [weak self] in self?.stop() })
+            let size = hosting.fittingSize
             let window = OverlayWindow(contentRect: NSRect(origin: .zero, size: size),
                                        styleMask: [.borderless], backing: .buffered, defer: false)
-            window.contentView = NSHostingView(rootView: KeyboardLockView { [weak self] in self?.stop() })
+            window.contentView = hosting
             window.isOpaque = false
             window.backgroundColor = .clear
             window.hasShadow = true

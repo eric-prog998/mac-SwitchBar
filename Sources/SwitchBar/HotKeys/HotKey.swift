@@ -10,6 +10,11 @@ struct HotKey: Codable, Equatable {
         KeyNames.modifierSymbols(modifiers) + KeyNames.name(for: keyCode)
     }
 
+    /// 「打开面板」的默认快捷键 ⌃⌥⌘S。
+    /// 14 英寸 MacBook Pro 的菜单栏有刘海，图标多时 SwitchBar 可能被挡住，这时可以用它打开面板。
+    static let defaultPanel = HotKey(keyCode: UInt32(kVK_ANSI_S),
+                                     modifiers: UInt32(controlKey) | UInt32(optionKey) | UInt32(cmdKey))
+
     static func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
         var result: UInt32 = 0
         if flags.contains(.control) { result |= UInt32(controlKey) }
@@ -18,6 +23,12 @@ struct HotKey: Codable, Equatable {
         if flags.contains(.command) { result |= UInt32(cmdKey) }
         return result
     }
+}
+
+/// 快捷键对应的动作：打开面板，或者切换某个开关
+enum HotKeyTarget: Hashable {
+    case panel
+    case feature(FeatureID)
 }
 
 enum KeyNames {

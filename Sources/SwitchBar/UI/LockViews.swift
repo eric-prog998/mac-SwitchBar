@@ -5,20 +5,28 @@ struct KeyboardLockView: View {
     let onUnlock: () -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             Image(systemName: "keyboard")
-                .font(.system(size: 34))
+                .font(.system(size: 36, weight: .regular))
+                .frame(height: 44)
             Text("键盘已锁定")
-                .font(.title2.bold())
-            Text("现在可以放心擦键盘了")
-                .foregroundColor(.secondary)
-            Button("解锁键盘", action: onUnlock)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .font(.system(size: 20, weight: .bold))
+            Text("现在可以放心擦键盘了\n合上屏幕或锁屏也会自动解锁")
+                .font(.system(size: 12))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+            Button(action: onUnlock) {
+                Text("解锁键盘")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 150)
+            }
+            .controlSize(.large)
+            .prominentButton()
+            .padding(.top, 6)
         }
-        .padding(24)
-        .frame(width: 300, height: 200)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(26)
+        .frame(width: 320)
+        .panelBackground(cornerRadius: 28)
     }
 }
 
@@ -33,34 +41,37 @@ struct CleaningView: View {
         ZStack {
             Color.black
             if showsControls {
-                VStack(spacing: 16) {
+                VStack(spacing: 14) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 40))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(.white.opacity(0.75))
                     Text("清洁模式")
-                        .font(.title.bold())
+                        .font(.system(size: 26, weight: .bold))
                         .foregroundColor(.white)
                     Text("屏幕和键盘已锁定，可以放心擦拭")
+                        .font(.system(size: 13))
                         .foregroundColor(.white.opacity(0.6))
                     ZStack {
                         Circle()
-                            .stroke(Color.white.opacity(0.25), lineWidth: 4)
+                            .fill(Color.white.opacity(0.08))
+                        Circle()
+                            .stroke(Color.white.opacity(0.2), lineWidth: 4)
                         Circle()
                             .trim(from: 0, to: pressing ? 1 : 0)
                             .stroke(Color.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                             .animation(pressing ? .linear(duration: 2) : .easeOut(duration: 0.2), value: pressing)
                         Image(systemName: "lock.open.fill")
-                            .font(.system(size: 20))
+                            .font(.system(size: 22))
                             .foregroundColor(.white)
                     }
-                    .frame(width: 64, height: 64)
+                    .frame(width: 72, height: 72)
                     .contentShape(Circle())
                     .onLongPressGesture(minimumDuration: 2, maximumDistance: 40, perform: onUnlock,
                                         onPressingChanged: { pressing = $0 })
-                    .padding(.top, 8)
+                    .padding(.top, 10)
                     Text(pressing ? "继续按住…" : "按住上面的按钮 2 秒解锁")
-                        .font(.callout)
+                        .font(.system(size: 12))
                         .foregroundColor(.white.opacity(0.6))
                 }
             }

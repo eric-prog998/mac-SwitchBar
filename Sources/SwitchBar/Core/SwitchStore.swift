@@ -324,7 +324,7 @@ final class SwitchStore: ObservableObject {
                 ("一直保持", 0), ("15 分钟", 15), ("30 分钟", 30), ("1 小时", 60),
                 ("2 小时", 120), ("4 小时", 240), ("8 小时", 480),
             ]
-            menu.addItem(ClosureMenuItem("保持亮屏…", handler: nil))
+            menu.addItem(ClosureMenuItem.header("保持亮屏多久"))
             for (title, minutes) in choices {
                 menu.addItem(ClosureMenuItem(title) { [weak self] in
                     self?.startKeepAwake(minutes: minutes, fromHotKey: false)
@@ -351,7 +351,7 @@ final class SwitchStore: ObservableObject {
 
         case .bluetoothAudio:
             let devices = bluetooth.pairedAudioDevices()
-            menu.addItem(ClosureMenuItem("选择耳机", handler: nil))
+            menu.addItem(ClosureMenuItem.header("选择耳机"))
             if devices.isEmpty {
                 menu.addItem(ClosureMenuItem("没有已配对的蓝牙音频设备", handler: nil))
             }
@@ -405,7 +405,7 @@ final class SwitchStore: ObservableObject {
             }
             for (index, display) in displays.enumerated() {
                 if index > 0 { menu.addItem(.separator()) }
-                menu.addItem(ClosureMenuItem(display.name, handler: nil))
+                menu.addItem(ClosureMenuItem.header(display.name))
                 addModes(display.primaryModes, of: display, to: menu)
                 if !display.otherModes.isEmpty {
                     let submenu = NSMenu()
@@ -425,11 +425,12 @@ final class SwitchStore: ObservableObject {
 
     private func addModes(_ modes: [Displays.ModeOption], of display: Displays.Display, to menu: NSMenu) {
         for option in modes {
-            menu.addItem(ClosureMenuItem("    " + option.title, checked: option.isCurrent) { [weak self] in
+            let item = ClosureMenuItem(option.title, checked: option.isCurrent) { [weak self] in
                 if !Displays.apply(option.mode, to: display.id) {
                     self?.report("切换分辨率失败")
                 }
-            })
+            }
+            menu.addItem(item)
         }
     }
 }

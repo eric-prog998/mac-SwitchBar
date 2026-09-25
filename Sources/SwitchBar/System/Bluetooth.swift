@@ -9,7 +9,12 @@ final class BluetoothAudio: NSObject {
         let isConnected: Bool
     }
 
-    private var pending: [String: (Bool) -> Void] = [:]
+    private struct Pending {
+        let token: UUID
+        let completion: (Bool) -> Void
+    }
+
+    private var pending: [String: Pending] = [:]
 
     /// 已配对的音频设备（耳机、音箱）；如果一个都识别不出来，就列出全部已配对设备
     func pairedAudioDevices() -> [Device] {
@@ -37,14 +42,16 @@ final class BluetoothAudio: NSObject {
             completion(true)
             return
         }
-        pending[address] = completion
+        let token = UUID()
+        pending[address] = Pending(token: token, completion: completion)
         guard device.openConnection(self) == kIOReturnSuccess else {
             finish(address, ok: false)
             return
         }
-        // 兜底：设备不在附近时可能迟迟没有回调
+        // 兜底：设备不在附近时可能迟迟没有回调（只处理这一次连接，不影响之后的连接）
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
-            self?.finish(address, ok: device.isConnected())
+            guard let self, self.pending[address]?.token == token else { return }
+            self.finish(address, ok: device.isConnected())
         }
     }
 
@@ -60,7 +67,7 @@ final class BluetoothAudio: NSObject {
     }
 
     private func finish(_ address: String, ok: Bool) {
-        guard let completion = pending.removeValue(forKey: address) else { return }
-        completion(ok)
+        guard let entry = pending.removeValue(forKey: address) else { return }
+        entry.completion(ok)
     }
 }

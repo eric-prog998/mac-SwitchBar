@@ -3,37 +3,70 @@ import AppKit
 import SwiftUI
 
 /// 仅调试版（swift build 默认）包含：把界面渲染成 PNG，方便在 CI 里检查界面、确认启动不崩溃。
-/// 发布版（make install 使用的 release）里完全没有这段代码。
+/// 发布版（make install / Releases 使用的 release）里完全没有这段代码。
+///
 /// 用法：SWITCHBAR_SNAPSHOT_DIR=/tmp/shots .build/debug/SwitchBar
+/// 另加 SWITCHBAR_SNAPSHOT_LIVE=1 时，会把真实的面板、设置窗口、提示框依次显示在屏幕上，
+/// 并把窗口编号写进 windows-<阶段>.txt，由 CI 用 screencapture 截取真实效果（包括液态玻璃）。
 enum Snapshot {
+    private static var directory = URL(fileURLWithPath: "/tmp")
+    private static var panel: MenuPanelController?
+    private static var lockWindow: NSWindow?
+
+    private struct Phase {
+        let name: String
+        let appearance: NSAppearance.Name
+        let tab: SettingsTab
+    }
+
+    private static let phases: [Phase] = [
+        Phase(name: "light", appearance: .aqua, tab: .features),
+        Phase(name: "dark", appearance: .darkAqua, tab: .features),
+        Phase(name: "light-general", appearance: .aqua, tab: .general),
+        Phase(name: "light-focus", appearance: .aqua, tab: .focus),
+        Phase(name: "light-about", appearance: .aqua, tab: .about),
+    ]
+
     static func runIfRequested() -> Bool {
-        guard let path = ProcessInfo.processInfo.environment["SWITCHBAR_SNAPSHOT_DIR"] else { return false }
-        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        let environment = ProcessInfo.processInfo.environment
+        guard let path = environment["SWITCHBAR_SNAPSHOT_DIR"] else { return false }
+        directory = URL(fileURLWithPath: path, isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let store = SwitchStore.shared
+        store.keepAwake.start(minutes: 60) // 让截图里有一个「开启」的开关
         store.refresh()
         print("states: \(store.states.map { "\($0.key.rawValue)=\($0.value)" }.sorted())")
         print("unavailable: \(store.unavailable.map(\.rawValue).sorted())")
 
-        for (appearance, suffix) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
-            render(PanelView(store: store, prefs: store.prefs), appearance: appearance,
-                   to: directory.appendingPathComponent("panel-\(suffix).png"))
+        renderStatic(store)
+
+        if environment["SWITCHBAR_SNAPSHOT_LIVE"] != nil {
+            write(phases.map(\.name).joined(separator: "\n") + "\n", to: "phases.txt")
+            runPhase(0)
+        } else {
+            finish()
         }
-        let tabs: [(SettingsTab, String)] = [(.features, "features"), (.general, "general"), (.focus, "focus"), (.about, "about")]
-        for (tab, name) in tabs {
-            SettingsRouter.shared.tab = tab
-            render(SettingsView(store: store, prefs: store.prefs, router: SettingsRouter.shared), appearance: .aqua,
-                   to: directory.appendingPathComponent("settings-\(name).png"))
-        }
-        render(KeyboardLockView {}, appearance: .darkAqua, to: directory.appendingPathComponent("lock-keyboard.png"))
-        render(CleaningView(showsControls: true) {}.frame(width: 800, height: 500), appearance: .darkAqua,
-               to: directory.appendingPathComponent("lock-cleaning.png"))
-        print("snapshots written to \(directory.path)")
         return true
     }
 
-    private static func render<V: View>(_ view: V, appearance: NSAppearance.Name, to url: URL) {
+    // MARK: - 离屏渲染
+
+    private static func renderStatic(_ store: SwitchStore) {
+        for (appearance, suffix) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
+            render(PanelView(store: store, prefs: store.prefs), appearance: appearance, name: "panel-\(suffix)")
+        }
+        for tab in SettingsTab.allCases {
+            SettingsRouter.shared.tab = tab
+            render(SettingsView(store: store, prefs: store.prefs, router: SettingsRouter.shared), appearance: .aqua,
+                   name: "settings-\(tab.rawValue)")
+        }
+        render(KeyboardLockView {}, appearance: .darkAqua, name: "lock-keyboard")
+        render(CleaningView(showsControls: true) {}.frame(width: 800, height: 500), appearance: .darkAqua,
+               name: "lock-cleaning")
+    }
+
+    private static func render<V: View>(_ view: V, appearance: NSAppearance.Name, name: String) {
         let hosting = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)))
         let size = hosting.fittingSize
         let window = NSWindow(contentRect: NSRect(x: 40, y: 40, width: size.width, height: size.height),
@@ -46,9 +79,78 @@ enum Snapshot {
         hosting.display()
         if let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
             hosting.cacheDisplay(in: hosting.bounds, to: rep)
-            try? rep.representation(using: .png, properties: [:])?.write(to: url)
+            try? rep.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent("\(name).png"))
         }
         window.orderOut(nil)
+    }
+
+    // MARK: - 屏幕上的真实窗口
+
+    private static func runPhase(_ index: Int) {
+        guard index < phases.count else {
+            finish()
+            return
+        }
+        let phase = phases[index]
+        NSApp.appearance = NSAppearance(named: phase.appearance)
+
+        let store = SwitchStore.shared
+        let panel = self.panel ?? MenuPanelController(rootView: PanelView(store: store, prefs: store.prefs))
+        self.panel = panel
+        panel.close()
+        panel.show(below: nil)
+
+        SettingsWindowController.shared.show(tab: phase.tab)
+        HUD.shared.show("深色模式：开", symbol: "moon.fill", duration: 60)
+        showKeyboardLock()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            var lines = "panel \(panel.windowNumber)\n"
+            if let number = SettingsWindowController.shared.windowNumber { lines += "settings \(number)\n" }
+            if let number = HUD.shared.windowNumber { lines += "hud \(number)\n" }
+            if let number = lockWindow?.windowNumber { lines += "lock \(number)\n" }
+            write(lines, to: "windows-\(phase.name).txt")
+            waitForCapture(phase.name, attemptsLeft: 120) {
+                runPhase(index + 1)
+            }
+        }
+    }
+
+    private static func showKeyboardLock() {
+        if lockWindow == nil {
+            let hosting = NSHostingView(rootView: KeyboardLockView {})
+            let size = hosting.fittingSize
+            let window = OverlayWindow(contentRect: NSRect(x: 60, y: 120, width: size.width, height: size.height),
+                                       styleMask: [.borderless], backing: .buffered, defer: false)
+            window.contentView = hosting
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = true
+            window.level = .floating
+            lockWindow = window
+        }
+        lockWindow?.orderFrontRegardless()
+    }
+
+    private static func waitForCapture(_ phase: String, attemptsLeft: Int, then next: @escaping () -> Void) {
+        let marker = directory.appendingPathComponent("captured-\(phase)").path
+        if FileManager.default.fileExists(atPath: marker) || attemptsLeft <= 0 {
+            next()
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            waitForCapture(phase, attemptsLeft: attemptsLeft - 1, then: next)
+        }
+    }
+
+    private static func write(_ text: String, to name: String) {
+        try? text.write(to: directory.appendingPathComponent(name), atomically: true, encoding: .utf8)
+    }
+
+    private static func finish() {
+        print("snapshots written to \(directory.path)")
+        SwitchStore.shared.keepAwake.stop(notify: false)
+        NSApp.terminate(nil)
     }
 }
 #endif

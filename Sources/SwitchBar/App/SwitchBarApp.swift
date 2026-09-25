@@ -23,24 +23,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         #if DEBUG
-        if Snapshot.runIfRequested() {
-            NSApp.terminate(nil)
-            return
-        }
+        // 调试版的截图模式会自己退出
+        if Snapshot.runIfRequested() { return }
         #endif
 
+        // 已经有一个 SwitchBar 在运行（比如又双击了一次），就不要再放一个图标到菜单栏
+        if let bundleID = Bundle.main.bundleIdentifier {
+            let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+                .filter { $0 != NSRunningApplication.current }
+            if !others.isEmpty {
+                NSApp.terminate(nil)
+                return
+            }
+        }
+
         let store = SwitchStore.shared
+        let prefs = Preferences.shared
         store.refresh()
-        statusBar = StatusBarController(store: store)
+        let statusBar = StatusBarController(store: store)
+        self.statusBar = statusBar
 
         let hotKeys = HotKeyManager.shared
-        hotKeys.onTrigger = { feature in
-            store.trigger(feature, fromHotKey: true)
+        hotKeys.onTrigger = { target in
+            switch target {
+            case .panel:
+                statusBar.togglePanel()
+            case .feature(let feature):
+                store.trigger(feature, fromHotKey: true)
+            }
         }
-        hotKeys.apply(Preferences.shared.hotKeys)
-        Preferences.shared.$hotKeys
+        hotKeys.apply(features: prefs.hotKeys, panel: prefs.panelHotKey)
+        prefs.$hotKeys.combineLatest(prefs.$panelHotKey)
             .dropFirst()
-            .sink { hotKeys.apply($0) }
+            .sink { features, panel in hotKeys.apply(features: features, panel: panel) }
             .store(in: &cancellables)
     }
 
