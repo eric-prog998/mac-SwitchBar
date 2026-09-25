@@ -55,6 +55,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     static let shared = SettingsWindowController()
 
     private var window: NSWindow?
+    /// 打开设置前正在用的应用；关掉设置后把焦点还给它（菜单栏应用关掉最后一个窗口后，系统不会自动切回去）
+    private var previousApp: NSRunningApplication?
 
     /// 窗口编号（调试版截图用）
     var windowNumber: Int? { window?.windowNumber }
@@ -75,6 +77,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             window.center()
             self.window = window
         }
+        if !NSApp.isActive {
+            let frontmost = NSWorkspace.shared.frontmostApplication
+            previousApp = frontmost == NSRunningApplication.current ? nil : frontmost
+        }
+        if window?.isMiniaturized == true {
+            window?.deminiaturize(nil)
+        }
         AppActivation.activate()
         window?.makeKeyAndOrderFront(nil)
     }
@@ -86,6 +95,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             guard let self, self.window === closing, !closing.isVisible else { return }
             closing.delegate = nil
             self.window = nil
+            // 你还停在 SwitchBar 上（没有自己点去别的应用）时，把焦点还给之前的应用
+            if NSApp.isActive, let previous = self.previousApp {
+                AppActivation.reactivate(previous)
+            }
+            self.previousApp = nil
         }
     }
 }

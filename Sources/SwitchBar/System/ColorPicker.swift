@@ -12,7 +12,8 @@ enum ColorPicker {
         self.sampler = sampler
         sampler.show { color in
             DispatchQueue.main.async {
-                self.sampler = nil
+                // 连着点了两次取色时，旧的回调不要把新的放大镜释放掉
+                if self.sampler === sampler { self.sampler = nil }
                 guard let color, let hex = hexString(color) else { return }
                 completion(hex, color)
             }

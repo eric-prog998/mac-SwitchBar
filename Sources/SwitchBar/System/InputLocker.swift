@@ -175,18 +175,10 @@ final class InputLocker {
             ?? NSScreen.screens.first
 
         for screen in NSScreen.screens {
-            let window = OverlayWindow(contentRect: screen.frame, styleMask: [.borderless],
-                                       backing: .buffered, defer: false)
-            window.setFrame(screen.frame, display: false)
             let showsControls = screen == mouseScreen
-            window.contentView = NSHostingView(rootView: CleaningView(showsControls: showsControls) { [weak self] in
+            let window = Self.makeOverlayWindow(frame: screen.frame, showsControls: showsControls) { [weak self] in
                 self?.stop()
-            })
-            window.isOpaque = true
-            window.backgroundColor = .black
-            window.level = .screenSaver
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-            window.isReleasedWhenClosed = false
+            }
             if showsControls {
                 window.makeKeyAndOrderFront(nil)
             } else {
@@ -194,6 +186,19 @@ final class InputLocker {
             }
             windows.append(window)
         }
+    }
+
+    /// 盖住一块屏幕的黑色窗口。先放界面、再设大小（反过来的话，SwiftUI 界面放进窗口时可能把窗口改小）
+    static func makeOverlayWindow(frame: NSRect, showsControls: Bool, onUnlock: @escaping () -> Void) -> OverlayWindow {
+        let window = OverlayWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = NSHostingView(rootView: CleaningView(showsControls: showsControls, onUnlock: onUnlock))
+        window.setFrame(frame, display: false)
+        window.isOpaque = true
+        window.backgroundColor = .black
+        window.level = .screenSaver
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        window.isReleasedWhenClosed = false
+        return window
     }
 }
 

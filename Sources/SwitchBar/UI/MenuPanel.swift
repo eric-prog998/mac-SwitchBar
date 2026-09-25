@@ -22,6 +22,12 @@ final class MenuPanelController<Content: View> {
     /// 窗口编号（调试版截图用）
     var windowNumber: Int? { panel?.windowNumber }
 
+    #if DEBUG
+    /// 调试版检查「关掉后界面有没有释放」用
+    var debugHosting: NSViewController? { hosting }
+    var debugWindow: NSWindow? { panel }
+    #endif
+
     init(content: @escaping () -> Content) {
         makeContent = content
     }
