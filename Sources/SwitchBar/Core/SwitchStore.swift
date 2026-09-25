@@ -402,7 +402,7 @@ final class SwitchStore: ObservableObject {
         let address = prefs.bluetoothAddress
         guard !address.isEmpty else {
             if fromHotKey {
-                report("请先在面板里点蓝牙耳机右上角的箭头，选择一副耳机")
+                report("请先在面板里点蓝牙耳机右边的「›」，选择一副耳机")
             } else {
                 showOptionsMenu(for: .bluetoothAudio)
             }
