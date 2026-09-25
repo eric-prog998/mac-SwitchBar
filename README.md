@@ -115,12 +115,16 @@ macOS 用代码签名来识别「是不是同一个应用」。默认的临时�
 
 ### 发布新版本
 
-推送一个 `v` 开头的标签，GitHub Actions 会自动在 macOS 上构建、打包，并把 `SwitchBar-vX.Y.Z.zip` 和校验值上传到 Releases（流程见 `.github/workflows/release.yml`）：
+GitHub Actions 会在 macOS 上自动构建、打包，并把 `SwitchBar-vX.Y.Z.zip` 和校验值上传到 Releases（流程见 `.github/workflows/release.yml`）。两种触发方式任选一种：
 
-```bash
-git tag v1.0.1
-git push origin v1.0.1
-```
+- 推送一个 `v` 开头的标签：
+
+  ```bash
+  git tag v1.0.1
+  git push origin v1.0.1
+  ```
+
+- 或者在 GitHub 网页上打开仓库的 **Actions › Release › Run workflow**，填入版本号（例如 `1.0.1`），会自动创建 `v1.0.1` 标签并发布。
 
 ## 14 英寸 MacBook Pro 小贴士
 

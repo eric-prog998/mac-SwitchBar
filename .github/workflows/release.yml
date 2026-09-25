@@ -1,16 +1,24 @@
-# 发布流程：推送 v 开头的标签（例如 v1.0.0）时，在 macOS 上构建 SwitchBar.app，
-# 打成 zip 连同 SHA-256 校验值一起上传到 GitHub Releases。
+# 发布流程：在 macOS 上构建 SwitchBar.app，打成 zip 连同 SHA-256 校验值一起上传到 GitHub Releases。
+# 两种触发方式：
+#   1. 推送 v 开头的标签，例如 git tag v1.0.1 && git push origin v1.0.1
+#   2. 在 GitHub 网页的 Actions › Release › Run workflow 里填版本号（例如 1.0.1），会自动创建 v1.0.1 标签
 name: Release
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号，不带 v，例如 1.0.1'
+        required: true
+        type: string
 
 permissions:
   contents: write # 创建 Release、上传文件需要
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.ref }}-${{ inputs.version }}
   cancel-in-progress: false
 
 jobs:
@@ -18,6 +26,24 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: 确定版本号
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="v${INPUT_VERSION#v}"
+          else
+            TAG="$GITHUB_REF_NAME"
+          fi
+          VERSION="${TAG#v}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "版本号格式不对：$VERSION（应该像 1.0.0）"
+            exit 1
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "发布 $TAG"
 
       - name: 安全自查（不允许出现网络代码和第三方依赖）
         run: ./scripts/audit.sh
@@ -28,10 +54,7 @@ jobs:
           swift --version
 
       - name: 构建（Apple 芯片 + Intel 通用版）
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "版本号：$VERSION"
-          VERSION="$VERSION" UNIVERSAL=1 ./scripts/build-app.sh
+        run: UNIVERSAL=1 ./scripts/build-app.sh
 
       - name: 启动测试（运行 5 秒不崩溃）
         run: |
@@ -43,7 +66,7 @@ jobs:
       - name: 打包
         run: |
           cd dist
-          ZIP="SwitchBar-${GITHUB_REF_NAME}.zip"
+          ZIP="SwitchBar-${TAG}.zip"
           ditto -c -k --keepParent SwitchBar.app "$ZIP"
           shasum -a 256 "$ZIP" | tee "$ZIP.sha256"
 
@@ -51,7 +74,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ZIP="SwitchBar-${GITHUB_REF_NAME}.zip"
+          ZIP="SwitchBar-${TAG}.zip"
           SHA="$(cut -d ' ' -f 1 "dist/$ZIP.sha256")"
           cat > "$RUNNER_TEMP/notes.md" <<EOF
           ## 安装
@@ -76,10 +99,16 @@ jobs:
           shasum -a 256 ~/Downloads/$ZIP
           \`\`\`
 
-          这个安装包由仓库里的 [release.yml](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/.github/workflows/release.yml) 在 GitHub 的 macOS 机器上从源码自动构建，构建过程可以在 [Actions 日志](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) 里查看。
+          这个安装包由仓库里的 [release.yml](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/.github/workflows/release.yml) 在 GitHub 的 macOS 机器上从源码（提交 \`${GITHUB_SHA}\`）自动构建，构建过程可以在 [Actions 日志](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) 里查看。
           EOF
-          gh release create "$GITHUB_REF_NAME" "dist/$ZIP" "dist/$ZIP.sha256" \
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            # 手动触发：在当前提交上创建标签
+            TAG_OPTION="--target=$GITHUB_SHA"
+          else
+            TAG_OPTION="--verify-tag"
+          fi
+          gh release create "$TAG" "dist/$ZIP" "dist/$ZIP.sha256" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "SwitchBar $GITHUB_REF_NAME" \
+            --title "SwitchBar $TAG" \
             --notes-file "$RUNNER_TEMP/notes.md" \
-            --verify-tag
+            "$TAG_OPTION"
